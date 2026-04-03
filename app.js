@@ -100,7 +100,7 @@ function saveSettings() {
   localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(state.settings));
 }
 
-const DEMO_SCRIPT = `Feed unavailable. Pac-Man is hungry but offline. Check your connection and try again. Meanwhile, enjoy this placeholder text as Pac-Man eats every single character until help arrives. Waka waka waka.`;
+const DEMO_SCRIPT = `Loading your news feed. Fetching the latest from The Verge and BBC Tech. Pac-Man is already hungry. Stories incoming. Waka waka waka.`;
 
 // Fetch RSS via our own Vercel API proxy (primary) or CORS proxies (fallback).
 // Individual timeout: 8s. If all fail, throws AggregateError.
@@ -1228,7 +1228,7 @@ function bindReadOverEvents() {
 function drawLoadingFrame(msg) {
   const g = chompGeometry();
   ctx.save();
-  ctx.fillStyle = '#0a0a0a';
+  ctx.fillStyle = renderCache.canvasBg;
   ctx.fillRect(0, 0, g.w, g.h);
   // Pac-Man idle
   drawChomp(g.padding + g.r, g.activeY, g.r, 0.45, 0);
@@ -1441,14 +1441,20 @@ function exitPrompter() {
 }
 
 async function startRSSReading() {
-  showScreen('prompter');
-  resizeCanvas();
-  drawLoadingFrame('Buscando The Verge + BBC Tech...');
-  const articles = await fetchRSSArticles();
-  state.articles = articles?.length ? articles : [DEMO_SCRIPT];
+  // Start eating immediately with placeholder — don't make user wait
+  state.articles    = [{ text: DEMO_SCRIPT, source: '', url: '' }];
   state.articleIndex = 0;
   loadCurrentArticle();
   startPrompter();
+
+  // Fetch in background; swap articles when ready
+  const articles = await fetchRSSArticles();
+  if (articles?.length) {
+    state.articles    = articles;
+    state.articleIndex = 0;
+    loadCurrentArticle();
+    startPrompter();
+  }
 }
 
 // Handle fullscreen exit via browser back button / swipe
