@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS = {
   scrollEffect: 'linear',
   mirror: false,
   progress: false,
+  asciiMode: false,
 };
 
 // ============================================================
@@ -375,7 +376,15 @@ function rebuildGraphemes() {
     index: s.index,
   }));
   state.cumWidths = [0];
-  for (const g of state.graphemes) state.cumWidths.push(state.cumWidths.at(-1) + g.width);
+  if (state.settings.asciiMode) {
+    // Uniform block width per grapheme in ASCII mode
+    const { bw } = getASCIIBlockDims();
+    for (let i = 0; i < state.graphemes.length; i++) {
+      state.cumWidths.push(state.cumWidths.at(-1) + bw);
+    }
+  } else {
+    for (const g of state.graphemes) state.cumWidths.push(state.cumWidths.at(-1) + g.width);
+  }
 }
 
 // Scared ghost (blue) — appears at end of text for Pac-Man to eat.
@@ -645,6 +654,95 @@ function drawWindLines(cx, cy, r, speed) {
   ctx.restore();
 }
 
+// ============================================================
+// ASCII Art mode — letters made of letters (letterbox style)
+// Triggered when user pinches past max font size.
+// ============================================================
+
+// Hidden canvas used to sample character shapes (pixel bitmaps).
+const _offCanvas = Object.assign(document.createElement('canvas'), { width: 64, height: 84 });
+const _offCtx    = _offCanvas.getContext('2d', { willReadFrequently: true });
+const _bitmapCache = new Map();
+
+const ASCII_COLS = 10;
+const ASCII_ROWS = 14;
+
+// Render `char` to offscreen canvas and return a flat Uint8Array bitmap.
+// 1 = cell is "lit" (part of the character), 0 = background.
+function getCharBitmap(char) {
+  const key = char + getFont();
+  if (_bitmapCache.has(key)) return _bitmapCache.get(key);
+
+  const W = 64, H = 84;
+  _offCtx.fillStyle = '#000';
+  _offCtx.fillRect(0, 0, W, H);
+  _offCtx.fillStyle = '#fff';
+  _offCtx.font = `bold ${H * 0.78}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  _offCtx.textBaseline = 'middle';
+  _offCtx.textAlign    = 'center';
+  _offCtx.fillText(char, W / 2, H / 2 + H * 0.04);
+
+  const pixels = _offCtx.getImageData(0, 0, W, H).data;
+  const bitmap = new Uint8Array(ASCII_COLS * ASCII_ROWS);
+  const cw = W / ASCII_COLS, ch = H / ASCII_ROWS;
+  for (let r = 0; r < ASCII_ROWS; r++) {
+    for (let c = 0; c < ASCII_COLS; c++) {
+      const px = Math.floor(c * cw + cw / 2);
+      const py = Math.floor(r * ch + ch / 2);
+      bitmap[r * ASCII_COLS + c] = pixels[(py * W + px) * 4] > 110 ? 1 : 0;
+    }
+  }
+  _bitmapCache.set(key, bitmap);
+  return bitmap;
+}
+
+// Block dimensions for ASCII art characters (based on current line height).
+function getASCIIBlockDims() {
+  const lh = getLineHeight();
+  const bh = Math.round(lh * 2.1);
+  const bw = Math.round(bh * 0.62);
+  return { bw, bh };
+}
+
+// Draw `char` as ASCII art at canvas center (cx, cy).
+// fillText is cycled through for fill characters.
+// fillOffset is the starting index in fillText.
+// Returns the new fillOffset after consuming cells.
+function drawCharAsASCII(char, fillText, fillOffset, cx, cy, bw, bh, alpha, eatColorT = 0) {
+  if (alpha <= 0.02 || !char || char === ' ' || char === '\n') return fillOffset;
+
+  const bitmap  = getCharBitmap(char);
+  const cellW   = bw / ASCII_COLS;
+  const cellH   = bh / ASCII_ROWS;
+  const cellFontPx = Math.max(5, Math.floor(Math.min(cellW, cellH) * 0.82));
+  const startX  = cx - bw / 2;
+  const startY  = cy - bh / 2;
+  const tLen    = fillText.length || 1;
+
+  // Color: interpolate white → Pac-Man yellow as char is eaten (eatColorT 0→1)
+  const cr = Math.round(240 + eatColorT * (245 - 240));
+  const cg = Math.round(240 + eatColorT * (197 - 240));
+  const cb = Math.round(240 + eatColorT * ( 24 - 240));
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font        = `${cellFontPx}px monospace`;
+  ctx.textBaseline = 'top';
+  ctx.fillStyle   = `rgb(${cr},${cg},${cb})`;
+
+  let fi = fillOffset;
+  for (let r = 0; r < ASCII_ROWS; r++) {
+    for (let c = 0; c < ASCII_COLS; c++) {
+      if (bitmap[r * ASCII_COLS + c]) {
+        ctx.fillText(fillText[fi % tLen] ?? '·', startX + c * cellW, startY + r * cellH);
+        fi++;
+      }
+    }
+  }
+  ctx.restore();
+  return fi;
+}
+
 // WPM range: 150 (speed 1, slow reader) → 600 (speed 10, speed reader)
 // Average adult reader ~200-250 WPM → default speed 3 = 250 WPM
 function calcWPM(speed) {
@@ -703,59 +801,76 @@ function renderFrame() {
   const eatenWidth   = state.cumWidths[Math.min(eatenCount, state.cumWidths.length - 1)] ?? 0;
   const currentG     = state.graphemes[eatenCount];
   const currentChar  = currentG?.char ?? '';
-  const currentCharW = currentG?.width ?? 0;
+  // In ASCII mode each grapheme occupies a uniform block width
+  const { bw: ASCII_BW, bh: ASCII_BH } = getASCIIBlockDims();
+  const currentCharW = state.settings.asciiMode ? ASCII_BW : (currentG?.width ?? 0);
 
   // ── Pac-Man FIXED on left — text scrolls right→left into mouth ──
-  const pacCX       = padding + chompR;
-  const textOriginX = mouthX - eatenWidth - charSubPhase * currentCharW;
+  const pacCX    = padding + chompR;
+  const upcomingX = mouthX + (1 - charSubPhase) * currentCharW;
 
-  // ── Upcoming text: grapheme-correct substring after current grapheme ──
-  const nextG        = state.graphemes[eatenCount + 1];
-  const upcomingText = nextG ? activeLine.text.substring(nextG.index) : '';
-  const upcomingX    = mouthX + (1 - charSubPhase) * currentCharW;
+  // ── Upcoming text (normal OR ASCII art) ──────────────────────
   ctx.save();
   ctx.beginPath();
   ctx.rect(mouthX, 0, w - mouthX, h);
   ctx.clip();
-  ctx.fillStyle = '#f0f0f0';
-  ctx.fillText(upcomingText, upcomingX, activeY + bob);
+
+  if (state.settings.asciiMode) {
+    // Draw each upcoming grapheme as an ASCII art block
+    const fillSrc = activeLine.text;
+    let fi = eatenCount * 15; // fill text offset cycles per char
+    let blockX = upcomingX;
+    for (let i = eatenCount + 1; i < state.graphemes.length; i++) {
+      if (blockX > w) break;
+      fi = drawCharAsASCII(state.graphemes[i].char, fillSrc, fi, blockX + ASCII_BW / 2, activeY, ASCII_BW, ASCII_BH, 1);
+      blockX += ASCII_BW;
+    }
+  } else {
+    const nextG        = state.graphemes[eatenCount + 1];
+    const upcomingText = nextG ? activeLine.text.substring(nextG.index) : '';
+    ctx.fillStyle = '#f0f0f0';
+    ctx.fillText(upcomingText, upcomingX, activeY + bob);
+  }
   ctx.restore();
 
   // ── Focus gradient: text near mouth = clear, far right = faded ──────
-  // Mimics WPM e-reader focus — eye pulled to the eating point, not ahead.
   {
     const c   = renderCache.canvasBg;
     const br  = c.length === 7 ? parseInt(c.slice(1, 3), 16) : 10;
     const bg_ = c.length === 7 ? parseInt(c.slice(3, 5), 16) : 10;
     const bb  = c.length === 7 ? parseInt(c.slice(5, 7), 16) : 10;
     const fog = ctx.createLinearGradient(mouthX, 0, w, 0);
-    fog.addColorStop(0,    `rgba(${br},${bg_},${bb},0)`);     // mouth: fully clear
-    fog.addColorStop(0.12, `rgba(${br},${bg_},${bb},0.18)`);  // just ahead: slight haze
-    fog.addColorStop(0.4,  `rgba(${br},${bg_},${bb},0.60)`);  // mid: reading horizon
-    fog.addColorStop(1,    `rgba(${br},${bg_},${bb},0.88)`);  // far: near-hidden
+    fog.addColorStop(0,    `rgba(${br},${bg_},${bb},0)`);
+    fog.addColorStop(0.12, `rgba(${br},${bg_},${bb},0.18)`);
+    fog.addColorStop(0.4,  `rgba(${br},${bg_},${bb},0.60)`);
+    fog.addColorStop(1,    `rgba(${br},${bg_},${bb},0.88)`);
     ctx.fillStyle = fog;
     ctx.fillRect(mouthX, 0, w - mouthX, h);
   }
 
   // ── Current grapheme: shrinks + fades + turns yellow as it's eaten ──
   if (currentChar) {
-    const eatT  = charSubPhase;                          // 0=entering mouth, 1=swallowed
-    const charLX = mouthX - eatT * currentCharW;         // left edge scrolls into mouth
-    if (charLX + currentCharW > mouthX) {                // still at least partially visible
+    const eatT   = charSubPhase;
+    const charLX = mouthX - eatT * currentCharW;
+    if (charLX + currentCharW > mouthX) {
       const cx  = charLX + currentCharW / 2;
-      const scl = 1 - eatT * 0.35;                       // shrinks to 65%
-      const alp = 1 - eatT * 0.85;                       // fades to 15%
-      // Interpolate white → Pac-Man yellow as char is consumed
-      const cr = Math.round(240 + eatT * (245 - 240));
-      const cg = Math.round(240 + eatT * (197 - 240));
-      const cb = Math.round(240 + eatT * ( 24 - 240));
-      ctx.save();
-      ctx.globalAlpha = alp;
-      ctx.fillStyle   = `rgb(${cr},${cg},${cb})`;
-      ctx.translate(cx, activeY + bob);
-      ctx.scale(scl, scl);
-      ctx.fillText(currentChar, -currentCharW / 2, 0);
-      ctx.restore();
+      const scl = 1 - eatT * 0.35;
+      const alp = 1 - eatT * 0.85;
+      if (state.settings.asciiMode) {
+        // Current char as ASCII art block, shrinks + fades + yellows
+        drawCharAsASCII(currentChar, activeLine.text, eatenCount * 15, cx, activeY + bob, ASCII_BW * scl, ASCII_BH * scl, alp, eatT);
+      } else {
+        const cr = Math.round(240 + eatT * (245 - 240));
+        const cg = Math.round(240 + eatT * (197 - 240));
+        const cb = Math.round(240 + eatT * ( 24 - 240));
+        ctx.save();
+        ctx.globalAlpha = alp;
+        ctx.fillStyle   = `rgb(${cr},${cg},${cb})`;
+        ctx.translate(cx, activeY + bob);
+        ctx.scale(scl, scl);
+        ctx.fillText(currentChar, -currentCharW / 2, 0);
+        ctx.restore();
+      }
     }
   }
 
@@ -1046,10 +1161,27 @@ ui.canvas.addEventListener('touchend', (e) => {
 }, { passive: true });
 
 ui.canvas.addEventListener('touchmove', (e) => {
-  // 2-finger pinch → font size
+  // 2-finger pinch → font size (or ASCII mode toggle at extremes)
   if (e.touches.length === 2 && _pinchDist !== null) {
     const dist  = getTouchDist(e.touches);
     const scale = dist / _pinchDist;
+
+    if (state.settings.asciiMode) {
+      // Pinch-in while in ASCII mode → exit ASCII mode, return to max fontSize
+      if (scale < 0.82) {
+        state.settings.asciiMode = false;
+        state.settings.fontSize  = 96;
+        _pinchFontSize = 96;
+        _pinchDist = dist; // re-anchor so normal pinch-in continues
+        ui.sliderFontSize.value = 96;
+        ui.fontSizeValue.textContent = '96px';
+        saveSettings();
+        rebuildGraphemes();
+      }
+      return;
+    }
+
+    // Normal mode: pinch controls font size
     const newSize = Math.round(Math.max(24, Math.min(96, _pinchFontSize * scale)));
     if (newSize !== state.settings.fontSize) {
       state.settings.fontSize = newSize;
@@ -1057,6 +1189,13 @@ ui.canvas.addEventListener('touchmove', (e) => {
       ui.fontSizeValue.textContent = newSize + 'px';
       saveSettings();
       schedulePrepareCanvas();
+    }
+    // Pinch-out past max → enter ASCII mode
+    if (scale > 1.18 && state.settings.fontSize >= 96) {
+      state.settings.asciiMode = true;
+      _bitmapCache.clear(); // regenerate bitmaps at new font
+      saveSettings();
+      rebuildGraphemes();
     }
     return;
   }
