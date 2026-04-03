@@ -229,6 +229,38 @@ function showScreen(name) {
   Object.entries(screens).forEach(([key, el]) => {
     el.classList.toggle('active', key === name);
   });
+  if (name === 'settings') {
+    // Move focus inside the dialog and trap it
+    requestAnimationFrame(() => ui.btnSettingsClose.focus());
+  }
+}
+
+// Returns all focusable elements inside el
+function getFocusable(el) {
+  return [...el.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )];
+}
+
+function handleSettingsTrap(e) {
+  if (!screens.settings.classList.contains('active')) return;
+  if (e.key === 'Escape') {
+    showScreen('prompter');
+    ui.btnSettings.focus();
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const focusable = getFocusable(screens.settings);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last  = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 }
 
 // ============================================================
@@ -323,7 +355,11 @@ function bindSettingsEvents() {
 
 function bindInputEvents() {
   ui.btnSettings.addEventListener('click', () => showScreen('settings'));
-  ui.btnSettingsClose.addEventListener('click', () => showScreen('prompter'));
+  ui.btnSettingsClose.addEventListener('click', () => {
+    showScreen('prompter');
+    ui.btnSettings.focus();
+  });
+  document.addEventListener('keydown', handleSettingsTrap);
 }
 
 // ============================================================
@@ -996,7 +1032,7 @@ function renderFrame() {
   // ── Progress bar ─────────────────────────────────────────────
   if (state.settings.progress && state.lines.length > 0) {
     const pct = Math.min(1, state.lineIndex / state.lines.length);
-    ui.progressBar.style.width = (pct * 100).toFixed(1) + '%';
+    ui.progressBar.style.transform = `scaleX(${pct.toFixed(4)})`;
   }
 
   // ── HUD (HTML element — update only when values change) ───────

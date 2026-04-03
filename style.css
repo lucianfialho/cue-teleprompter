@@ -27,12 +27,24 @@
   --t-normal: 220ms ease;
 
   /* Arcade theme */
-  --arcade-yellow:  #ffff00;
-  --arcade-cyan:    #00ffff;
-  --arcade-magenta: #ff00ff;
-  --arcade-purple:  #8800ff;
-  --arcade-bg:      #05010d;
-  --arcade-font:    'Press Start 2P', 'Courier New', monospace;
+  --arcade-yellow:      #ffff00;
+  --arcade-cyan:        #00ffff;
+  --arcade-magenta:     #ff00ff;
+  --arcade-purple:      #8800ff;
+  --arcade-orange:      #ff8800;
+  --arcade-red:         #ff2200;
+  --arcade-bg:          #05010d;
+  --arcade-marquee-bg:  #0d0618;
+  --arcade-hud-bg:      #000000;
+  --arcade-border:      #222222;
+  --arcade-pip-border:  #333333;
+  --arcade-hud-label:   #444444;
+  --arcade-text:        #ffffff;
+  --arcade-font:        'Press Start 2P', 'Courier New', monospace;
+
+  /* UI chrome */
+  --switch-on:    #34c759;
+  --switch-thumb: #ffffff;
 }
 
 [data-theme="light"] {
@@ -260,7 +272,7 @@ button {
 }
 
 .switch[aria-checked="true"] {
-  background: #34c759;
+  background: var(--switch-on);
 }
 
 .switch-thumb {
@@ -270,7 +282,7 @@ button {
   width: 27px;
   height: 27px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--switch-thumb);
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
   transition: transform var(--t-fast);
   pointer-events: none;
@@ -325,16 +337,6 @@ button {
   z-index: 3;
 }
 
-#camera-feed {
-  /* Off-screen but still decoded — ctx.drawImage needs active video frames */
-  position: fixed;
-  top: -9999px;
-  left: -9999px;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
-}
-
 #prompter-canvas {
   position: absolute;
   inset: 0;
@@ -352,7 +354,7 @@ button {
   align-items: center;
   padding: 8px 16px;
   padding-top: max(8px, env(safe-area-inset-top));
-  background: #0d0618;
+  background: var(--arcade-marquee-bg);
   border-bottom: 2px solid var(--arcade-yellow);
   font-family: var(--arcade-font);
   position: relative;
@@ -360,8 +362,8 @@ button {
 }
 
 .arcade-settings-btn {
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 44px;
+  min-height: 44px;
   color: var(--arcade-yellow);
   opacity: 0.6;
   transition: opacity var(--t-fast);
@@ -412,8 +414,8 @@ button {
   display: flex;
   justify-content: space-between;
   padding: 6px 16px;
-  background: #000;
-  border-bottom: 1px solid #222;
+  background: var(--arcade-hud-bg);
+  border-bottom: 1px solid var(--arcade-border);
   font-family: var(--arcade-font);
   position: relative;
   z-index: 15;
@@ -432,7 +434,7 @@ button {
 
 .arcade-score-val {
   font-size: 9px;
-  color: #fff;
+  color: var(--arcade-text);
   margin-top: 3px;
   letter-spacing: 1px;
 }
@@ -440,46 +442,6 @@ button {
 .arcade-hiscore {
   color: var(--arcade-yellow);
   text-shadow: 0 0 6px var(--arcade-yellow);
-}
-
-.prompter-controls {
-  position: absolute;
-  top: max(16px, env(safe-area-inset-top));
-  right: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 10;
-}
-
-.prompter-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--touch-min);
-  min-height: var(--touch-min);
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.45);
-  color: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  transition: color var(--t-fast), background var(--t-fast);
-}
-
-.prompter-btn:hover,
-.prompter-btn:focus-visible {
-  color: #fff;
-  background: rgba(0, 0, 0, 0.7);
-}
-
-.prompter-btn[aria-pressed="true"] {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-}
-
-.prompter-btn:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
 }
 
 /* ── Arcade HUD ─────────────────────────────────────────────── */
@@ -493,7 +455,7 @@ button {
   align-items: center;
   padding: 8px 20px;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
-  background: #000;
+  background: var(--arcade-hud-bg);
   border-top: 2px solid var(--arcade-yellow);
   font-family: var(--arcade-font);
   z-index: 15;
@@ -524,7 +486,7 @@ button {
 
 .ahud-lbl {
   font-size: 6px;
-  color: #444;
+  color: var(--arcade-hud-label);
   letter-spacing: 1px;
 }
 
@@ -537,7 +499,7 @@ button {
 .ahud-pip {
   width: 8px;
   height: 8px;
-  border: 1px solid #333;
+  border: 1px solid var(--arcade-pip-border);
   background: transparent;
   transition: background 0.1s, box-shadow 0.1s;
 }
@@ -549,22 +511,47 @@ button {
 }
 
 .ahud-pip.on.orange {
-  background: #ff8800;
-  border-color: #ff8800;
-  box-shadow: 0 0 4px #ff8800;
+  background: var(--arcade-orange);
+  border-color: var(--arcade-orange);
+  box-shadow: 0 0 4px var(--arcade-orange);
 }
 
 .ahud-pip.on.red {
-  background: #ff2200;
-  border-color: #ff2200;
-  box-shadow: 0 0 4px #ff2200;
+  background: var(--arcade-red);
+  border-color: var(--arcade-red);
+  box-shadow: 0 0 4px var(--arcade-red);
 }
 
-/* Mobile */
+/* Mobile portrait */
 @media (max-width: 480px) {
   .ahud-wpm-val { font-size: 11px; }
   .ahud-pips { gap: 2px; }
   .ahud-pip  { width: 6px; height: 6px; }
+}
+
+/* Landscape mobile — conserve vertical space for the canvas */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Collapse scoreboard entirely — score still tracked, just hidden */
+  .arcade-scoreboard { display: none; }
+
+  /* Tighten marquee */
+  .arcade-marquee {
+    padding-top: max(4px, env(safe-area-inset-top));
+    padding-bottom: 4px;
+  }
+
+  /* Tighten HUD */
+  .arcade-hud {
+    padding-top: 4px;
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+  }
+
+  /* Smaller pips and WPM label in landscape */
+  .ahud-wpm-val { font-size: 10px; }
+  .ahud-pips    { gap: 2px; }
+  .ahud-pip     { width: 5px; height: 5px; }
+  .ahud-font-val { font-size: 8px; }
+  .ahud-lbl     { display: none; } /* remove SPEED/WPM/FONT labels */
 }
 
 .progress-bar {
@@ -572,11 +559,13 @@ button {
   top: 0;
   left: 0;
   height: 3px;
+  width: 100%;
   background: var(--arcade-yellow);
   box-shadow: 0 0 8px var(--arcade-yellow), 0 0 20px var(--arcade-yellow);
-  width: 0%;
+  transform: scaleX(0);
+  transform-origin: left;
   z-index: 10;
-  transition: width 100ms linear;
+  transition: transform 100ms linear;
   pointer-events: none;
   display: none;
 }
@@ -624,7 +613,7 @@ button {
 
 .arcade-gameover-count {
   font-size: 10px;
-  color: #fff;
+  color: var(--arcade-text);
   letter-spacing: 2px;
 }
 
@@ -663,6 +652,11 @@ button {
 .ago-exit:hover,
 .ago-exit:active {
   box-shadow: 0 0 12px var(--arcade-magenta), 0 0 30px var(--arcade-magenta);
+}
+
+.arcade-gameover-btn:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
 }
 
 /* Mobile */
