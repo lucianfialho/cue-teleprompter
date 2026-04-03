@@ -131,60 +131,43 @@
     <div id="progress-bar" class="progress-bar" aria-hidden="true"></div>
 
     <!-- Read Over overlay -->
-    <div id="read-over" class="read-over" hidden>
-      <div class="read-over-card">
-        <p class="read-over-label">read over</p>
-        <p id="read-over-count" class="read-over-count">1 / 1</p>
-        <div class="read-over-actions">
-          <button id="btn-next-article" class="read-over-btn ro-next">Next →</button>
-          <button id="btn-game-over"    class="read-over-btn ro-exit">Game Over</button>
+    <div id="arcade-gameover" class="arcade-gameover" hidden>
+      <div class="arcade-gameover-card">
+        <p class="arcade-gameover-label">READ OVER</p>
+        <p id="arcade-gameover-count" class="arcade-gameover-count">1 / 1</p>
+        <div class="arcade-gameover-actions">
+          <button id="btn-next-article" class="arcade-gameover-btn ago-next">NEXT →</button>
+          <button id="btn-game-over"    class="arcade-gameover-btn ago-exit">GAME OVER</button>
         </div>
       </div>
     </div>
 
-    <div id="prompter-hud" class="prompter-hud" aria-hidden="true">
+    <div id="arcade-hud" class="arcade-hud" aria-hidden="true">
 
-      <!-- WPM + speed bar -->
-      <div class="hud-item">
-        <span id="hud-wpm" class="hud-wpm">82</span>
-        <span class="hud-label">wpm</span>
-      </div>
-      <div class="hud-track">
-        <div id="hud-speed-fill" class="hud-fill"></div>
+      <div class="ahud-wpm">
+        <span id="ahud-wpm-val" class="ahud-wpm-val">280</span>
+        <span class="ahud-lbl">WPM</span>
       </div>
 
-      <div class="hud-sep"></div>
-
-      <!-- Font size -->
-      <div class="hud-item hud-item--font">
-        <!-- "Aa" text-size icon -->
-        <svg class="hud-icon" viewBox="0 0 20 16" fill="none" aria-hidden="true">
-          <text x="0" y="13" font-size="13" font-family="sans-serif" fill="currentColor" font-weight="600">A</text>
-          <text x="11" y="11" font-size="9"  font-family="sans-serif" fill="currentColor">a</text>
-        </svg>
-        <span id="hud-font-val" class="hud-val">48</span>
-      </div>
-
-      <div class="hud-sep"></div>
-
-      <!-- Control hints — SVG icons only, no emoji -->
-      <div class="hud-hints">
-        <!-- Swipe up/down = speed -->
-        <div class="hud-hint" title="swipe ↕ = speed">
-          <svg class="hud-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="4,7  9,3  14,7"/>
-            <polyline points="4,11 9,15 14,11"/>
-          </svg>
+      <div class="ahud-speed">
+        <div class="ahud-pips" id="ahud-pips">
+          <div class="ahud-pip" data-pip="1"></div>
+          <div class="ahud-pip" data-pip="2"></div>
+          <div class="ahud-pip" data-pip="3"></div>
+          <div class="ahud-pip" data-pip="4"></div>
+          <div class="ahud-pip" data-pip="5"></div>
+          <div class="ahud-pip" data-pip="6"></div>
+          <div class="ahud-pip" data-pip="7"></div>
+          <div class="ahud-pip" data-pip="8"></div>
+          <div class="ahud-pip" data-pip="9"></div>
+          <div class="ahud-pip" data-pip="10"></div>
         </div>
-        <!-- Pinch in/out = font -->
-        <div class="hud-hint" title="pinch = font size">
-          <svg class="hud-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="2"  y1="16" x2="7"  y2="11"/>
-            <line x1="16" y1="2"  x2="11" y2="7"/>
-            <polyline points="2,11 2,16 7,16"/>
-            <polyline points="11,2 16,2 16,7"/>
-          </svg>
-        </div>
+        <span class="ahud-lbl">SPEED</span>
+      </div>
+
+      <div class="ahud-font">
+        <span id="ahud-font-val" class="ahud-font-val">Aa 48</span>
+        <span class="ahud-lbl">FONT</span>
       </div>
 
     </div>
