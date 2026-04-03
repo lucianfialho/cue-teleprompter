@@ -34,9 +34,6 @@ const state = {
   animFrameId:  null,
   lines: [],           // [{text}]
   particles: [],       // crunch debris
-  // Camera
-  cameraStream: null,
-  cameraActive: false,
 };
 
 // ============================================================
@@ -52,8 +49,6 @@ const screens = {
 };
 
 const ui = {
-  cameraFeed:      $('camera-feed'),
-  btnCamera:       $('btn-camera'),
   scriptInput:     $('script-input'),
   btnStart:        $('btn-start'),
   btnClear:        $('btn-clear'),
@@ -231,7 +226,6 @@ function bindSettingsEvents() {
     state.settings.mirror = !state.settings.mirror;
     saveSettings();
     syncSettingsUI();
-    // Mirror logic for camera is handled in renderFrame via ctx.scale(-1,1)
     if (state.lines.length) renderFrame();
   });
 
@@ -265,7 +259,6 @@ function bindInputEvents() {
 
   ui.btnStart.addEventListener('click', startPrompter);
   ui.btnExit.addEventListener('click', exitPrompter);
-  ui.btnCamera.addEventListener('click', toggleCamera);
 }
 
 // ============================================================
@@ -485,17 +478,8 @@ function renderFrame() {
     : 0;
 
   // ── Background ───────────────────────────────────────────────
-  if (state.cameraActive && ui.cameraFeed.readyState >= 2) {
-    ctx.save();
-    if (!state.settings.mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(ui.cameraFeed, 0, 0, w, h);
-    ctx.restore();
-    ctx.fillStyle = 'rgba(0,0,0,0.60)';
-    ctx.fillRect(0, 0, w, h);
-  } else {
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, w, h);
-  }
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, w, h);
 
   if (!state.lines.length) return;
 
@@ -703,43 +687,6 @@ ui.canvas.addEventListener('touchmove', (e) => {
 }, { passive: true });
 
 // ============================================================
-// Camera
-// ============================================================
-
-async function startCamera() {
-  if (!navigator.mediaDevices?.getUserMedia) return;
-  try {
-    state.cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    });
-    ui.cameraFeed.srcObject = state.cameraStream;
-    state.cameraActive = true;
-    ui.btnCamera.setAttribute('aria-pressed', 'true');
-    ui.btnCamera.setAttribute('aria-label', 'Desativar câmera');
-  } catch (err) {
-    // Permission denied or no camera — fail silently
-    state.cameraActive = false;
-  }
-}
-
-function stopCamera() {
-  if (state.cameraStream) {
-    state.cameraStream.getTracks().forEach((t) => t.stop());
-    state.cameraStream = null;
-  }
-  ui.cameraFeed.srcObject = null;
-  state.cameraActive = false;
-  ui.btnCamera.setAttribute('aria-pressed', 'false');
-  ui.btnCamera.setAttribute('aria-label', 'Ativar câmera');
-}
-
-function toggleCamera() {
-  if (state.cameraActive) stopCamera();
-  else startCamera();
-}
-
-// ============================================================
 // Fullscreen helpers
 // ============================================================
 
@@ -782,7 +729,6 @@ function startPrompter() {
 function exitPrompter() {
   state.running = false;
   cancelAnimationFrame(state.animFrameId);
-  stopCamera();
   exitFullscreen().catch(() => {});
   showScreen('input');
 }
