@@ -323,6 +323,8 @@ button {
   align-items: center;
   overflow: hidden;
   position: relative;
+  background: var(--arcade-bg);
+  padding-top: 12px;
 }
 
 #screen-prompter::before {
