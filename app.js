@@ -82,24 +82,12 @@ function saveSettings() {
   localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(state.settings));
 }
 
-const EXAMPLE_SCRIPT =
-`Você já perdeu uma gravação porque estava olhando para o papel?
+const DEMO_SCRIPT =
+`Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo. Quisque sit amet est et sapien ullamcorper pharetra. Vestibulum erat wisi, condimentum sed, commodo vitae, ornare sit amet, wisi. Aenean fermentum, elit eget tincidunt condimentum, eros ipsum rutrum orci, sagittis tempus lacus enim ac dui. Donec non enim in turpis pulvinar facilisis. Ut felis. Praesent dapibus, neque id cursus faucibus, tortor neque egestas augue, eu vulputate magna eros eu erat. Aliquam erat volutpat. Nam dui mi, tincidunt quis, accumsan porttitor, facilisis luctus, metus. Phasellus ultrices nulla quis nibh. Quisque a lectus. Donec consectetuer ligula vulputate sem tristique cursus. Nam nulla quam, gravida non, commodo a, sodales sit amet, nisi. Nullam in massa. Suspendisse vitae nisl sit amet augue bibendum aliquam. Vestibulum nisi lectus, commodo ac, facilisis ac, ultricies eu, pede. Ut orci risus, accumsan porttitor, cursus quis, aliquet eget, justo. Sed pretium blandit orci. Ut eu diam at pede suscipit sodales. Aenean lectus elit, fermentum non, convallis id, sagittis at, neque. Nullam mauris orci, aliquet et, iaculis et, viverra vitae, ligula. Nulla ut felis in purus aliquam imperdiet. Maecenas aliquet mollis lectus. Vivamus consectetuer risus et tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus sit amet semper lacus, in mollis libero. Curabitur commodo sagittis enim. Donec hendrerit sem vel ante lobortis euismod. Curabitur id tortor vitae nulla suscipit tincidunt vitae et arcu. Duis vel lacus at felis vehicula aliquam. Integer eu ante vel purus vehicula pharetra. Maecenas risus risus, condimentum et congue vel, laoreet a lorem.`;
 
-Cue resolve isso.
-
-É um teleprompter que roda direto no seu celular. Sem instalar nada. Sem criar conta. Sem pagar nada.
-
-Cole seu roteiro, aperte Iniciar — e leia enquanto olha para a câmera.
-
-O texto rola automaticamente. Você controla a velocidade com um toque na tela. Se precisar pausar, é só tocar de novo.
-
-Tem modo espelho para quem usa teleprompter físico na frente da câmera. Tem modo fisheye, que destaca a linha que você está lendo agora. Funciona offline. Funciona em qualquer celular.
-
-EatText. O teleprompter que come seu roteiro linha por linha.`;
 
 function loadScript() {
-  state.script = localStorage.getItem(STORAGE_KEY_SCRIPT) ?? EXAMPLE_SCRIPT;
-  ui.scriptInput.value = state.script;
+  state.script = DEMO_SCRIPT;
 }
 
 let _saveScriptTimer = null;
@@ -758,10 +746,8 @@ function init() {
   loadScript();
   updateRenderCache();
   syncSettingsUI();
-  bindInputEvents();
-  bindSettingsEvents();
   bindKeyboardEvents();
-  showScreen('input');
+  startPrompter();
 }
 
 init();
