@@ -360,11 +360,13 @@ function bindKeyboardEvents() {
         e.preventDefault();
         state.settings.speed = Math.min(10, state.settings.speed + 1);
         saveSettings();
+        notifySpeedChange();
         break;
       case 'ArrowDown':
         e.preventDefault();
         state.settings.speed = Math.max(1, state.settings.speed - 1);
         saveSettings();
+        notifySpeedChange();
         break;
       case 'Escape':
         e.preventDefault();
