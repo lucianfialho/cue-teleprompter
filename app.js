@@ -329,23 +329,26 @@ function resizeCanvas() {
 }
 
 // Build flat word list with x positions for horizontal scroll.
-// Words from different paragraphs get a larger gap between them.
+// Each word is rendered as a rounded pill — padX/padY define the pill insets.
 function buildWords(text) {
   ctx.font = getFont();
   const fs      = state.settings.fontSize;
-  const wordGap = Math.round(fs * 0.55);  // space between words
-  const paraGap = Math.round(fs * 2.2);   // extra gap at paragraph break
+  const padX    = Math.round(fs * 0.42);  // horizontal pill padding
+  const padY    = Math.round(fs * 0.22);  // vertical pill padding → pill height = fs + 2*padY
+  const wordGap = Math.round(fs * 0.55);  // gap between pills
+  const paraGap = Math.round(fs * 1.4);   // paragraph break gap
   let x = 0;
   state.words = [];
   for (const para of text.split('\n')) {
     const raw = para.trim().split(/\s+/).filter(Boolean);
     if (!raw.length) { x += paraGap; continue; }
     for (const word of raw) {
-      const w = ctx.measureText(word).width;
-      state.words.push({ text: word, x, width: w });
-      x += w + wordGap;
+      const tw    = ctx.measureText(word).width;
+      const pillW = tw + padX * 2;
+      state.words.push({ text: word, x, width: tw, pillW, padX, padY });
+      x += pillW + wordGap;
     }
-    x += paraGap - wordGap; // extra gap at end of paragraph
+    x += paraGap - wordGap;
   }
   state.totalWidth = x;
 }
@@ -440,25 +443,35 @@ function renderFrame() {
   // Clip: words vanish once they reach the mouth opening
   const clipX = chompX + chompR;
 
-  // ── Background ───────────────────────────────────────────────
+  // ── Background — always dark in prompter ─────────────────────
   if (state.cameraActive && ui.cameraFeed.readyState >= 2) {
     ctx.save();
     if (!state.settings.mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
     ctx.drawImage(ui.cameraFeed, 0, 0, w, h);
     ctx.restore();
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = 'rgba(0,0,0,0.60)';
     ctx.fillRect(0, 0, w, h);
   } else {
-    ctx.fillStyle = renderCache.canvasBg;
+    ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, w, h);
   }
 
   if (!state.words.length) return;
 
-  // ── Words ─────────────────────────────────────────────────────
+  const fs      = state.settings.fontSize;
+  const pillR   = Math.round((fs + state.words[0].padY * 2) / 2); // pill corner radius
+  const wordY   = chompY + bob;
+
+  // ── Track lane (subtle glow behind pill row) ──────────────────
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fillRect(clipX, wordY - pillR - 2, w - clipX, (pillR + 2) * 2);
+  ctx.restore();
+
+  // ── Word pills ────────────────────────────────────────────────
   ctx.save();
   ctx.beginPath();
-  ctx.rect(clipX, 0, w - clipX, h); // only draw right of mouth
+  ctx.rect(clipX, 0, w - clipX, h);
   ctx.clip();
 
   if (state.settings.mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
@@ -467,19 +480,27 @@ function renderFrame() {
   ctx.textBaseline = 'middle';
 
   state.words.forEach((word) => {
-    // Words start off-screen right, scroll left
     const sx = word.x - state.scrollX + w;
-    if (sx + word.width < clipX || sx > w + 200) return;
+    if (sx + word.pillW < clipX || sx > w + 400) return;
 
-    // Fade as word approaches the mouth
-    const dist    = sx - clipX;
-    const fadeZone = word.width * 2 + state.settings.fontSize;
+    const dist     = sx - clipX;
+    const fadeZone = word.pillW + fs;
     const opacity  = dist < fadeZone ? Math.max(0, dist / fadeZone) : 1;
 
     ctx.save();
     ctx.globalAlpha = opacity;
-    ctx.fillStyle   = renderCache.canvasText;
-    ctx.fillText(word.text, sx, chompY + bob);
+
+    // Pill background
+    const py = wordY - pillR;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.roundRect(sx, py, word.pillW, pillR * 2, pillR);
+    ctx.fill();
+
+    // Word text (dark on white pill)
+    ctx.fillStyle = '#111111';
+    ctx.fillText(word.text, sx + word.padX, wordY);
+
     ctx.restore();
   });
 
