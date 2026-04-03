@@ -49,6 +49,7 @@ const state = {
   graphemes: [],       // [{char, width, index}] for active line — grapheme-aware
   cumWidths: [0],      // [0, w0, w0+w1, ...] cumulative pixel widths, O(1) lookup
   finale: null,        // null | {phase, born, ghostX, chomped}
+  bgImage: null,       // HTMLImageElement | null — current article hero image
 };
 
 // ============================================================
@@ -147,7 +148,13 @@ async function fetchFeed(url, source, descClean) {
     // RSS 2.0: <link> text node. Atom: <link href="..."> attribute
     const linkEl = item.querySelector('link');
     const articleUrl = linkEl?.getAttribute('href') || linkEl?.textContent?.trim() || '';
-    return { text, source, url: articleUrl };
+    // Media image: BBC uses <media:thumbnail>, Verge uses <media:content medium="image">
+    const imageUrl =
+      item.querySelector('thumbnail')?.getAttribute('url') ??
+      item.querySelector('content[medium="image"]')?.getAttribute('url') ??
+      item.querySelector('content[type="image/jpeg"], content[type="image/png"], content[type="image/webp"]')?.getAttribute('url') ??
+      null;
+    return { text, source, url: articleUrl, image: imageUrl };
   }).filter(a => a.text.length > 5);
 }
 
@@ -182,8 +189,14 @@ async function fetchRSSArticles() {
 
 function loadCurrentArticle() {
   const article = state.articles[state.articleIndex];
+  state.bgImage = null;
   if (article && typeof article === 'object') {
     state.script = article.text;
+    if (article.image) {
+      const img = new Image();
+      img.onload = () => { state.bgImage = img; };
+      img.src = article.image;
+    }
   } else {
     state.script = article ?? DEMO_SCRIPT;
   }
@@ -879,7 +892,22 @@ function renderFrame() {
   const charSubPhase = state.charProgress % 1;
 
   // ── Background ───────────────────────────────────────────────
-  ctx.fillStyle = '#0a0a0a';
+  ctx.clearRect(0, 0, w, h);
+  if (state.bgImage) {
+    // Cover-fit the image, blurred and dimmed
+    const img = state.bgImage;
+    const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+    const dw = img.naturalWidth * scale;
+    const dh = img.naturalHeight * scale;
+    const dx = (w - dw) / 2;
+    const dy = (h - dh) / 2;
+    ctx.filter = 'blur(18px) brightness(0.28) saturate(1.4)';
+    ctx.drawImage(img, dx - 20, dy - 20, dw + 40, dh + 40);
+    ctx.filter = 'none';
+    ctx.fillStyle = 'rgba(6, 6, 10, 0.55)';
+  } else {
+    ctx.fillStyle = renderCache.canvasBg;
+  }
   ctx.fillRect(0, 0, w, h);
 
   // ── Wind lines (drawn before text so they're behind everything) ──
