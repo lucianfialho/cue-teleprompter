@@ -347,6 +347,28 @@ button {
   z-index: 1;
 }
 
+/* ── Article image card ──────────────────────────────────────── */
+.article-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -140%);
+  z-index: 2;
+  border-radius: 10px;
+  overflow: hidden;
+  opacity: 0.72;
+  pointer-events: none;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+}
+
+.article-card[hidden] { display: none; }
+
+.article-card-img {
+  display: block;
+  width: 220px;
+  height: 124px;
+  object-fit: cover;
+}
 
 /* ── Arcade Marquee ─────────────────────────────────────────── */
 .arcade-marquee {
