@@ -207,8 +207,7 @@ function bindSettingsEvents() {
     state.settings.mirror = !state.settings.mirror;
     saveSettings();
     syncSettingsUI();
-    // Front camera is already mirrored by CSS; flip back when mirror mode is on
-    ui.cameraFeed.style.transform = state.settings.mirror ? 'scaleX(1)' : 'scaleX(-1)';
+    // Mirror logic for camera is handled in renderFrame via ctx.scale(-1,1)
     if (state.lines.length) renderFrame();
   });
 
@@ -389,11 +388,25 @@ function renderFrame() {
   const useFisheye  = isFisheye && !reducedMotion;
   const center = h / 2;
 
-  // Background — solid when no camera, dark overlay when camera active
-  ctx.fillStyle = state.cameraActive ? 'rgba(0,0,0,0.62)' : (
-    getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim() || '#0a0a0a'
-  );
-  ctx.fillRect(0, 0, w, h);
+  // Background layer
+  if (state.cameraActive && ui.cameraFeed.readyState >= 2) {
+    // Draw camera frame directly onto canvas (so PiP captures it too)
+    ctx.save();
+    // Front camera is naturally mirrored — flip unless mirror mode is on
+    if (!state.settings.mirror) {
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(ui.cameraFeed, 0, 0, w, h);
+    ctx.restore();
+    // Dark overlay for text legibility
+    ctx.fillStyle = 'rgba(0,0,0,0.58)';
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    ctx.fillStyle = getComputedStyle(document.documentElement)
+      .getPropertyValue('--canvas-bg').trim() || '#0a0a0a';
+    ctx.fillRect(0, 0, w, h);
+  }
 
   if (!state.lines.length) return;
 
@@ -579,7 +592,6 @@ async function startCamera() {
       audio: false,
     });
     ui.cameraFeed.srcObject = state.cameraStream;
-    ui.cameraFeed.classList.add('active');
     state.cameraActive = true;
     ui.btnCamera.setAttribute('aria-pressed', 'true');
     ui.btnCamera.setAttribute('aria-label', 'Desativar câmera');
@@ -595,7 +607,6 @@ function stopCamera() {
     state.cameraStream = null;
   }
   ui.cameraFeed.srcObject = null;
-  ui.cameraFeed.classList.remove('active');
   state.cameraActive = false;
   ui.btnCamera.setAttribute('aria-pressed', 'false');
   ui.btnCamera.setAttribute('aria-label', 'Ativar câmera');
