@@ -1486,6 +1486,7 @@ async function init() {
   loadSettings();
   updateRenderCache();
   syncSettingsUI();
+  bindSettingsEvents();
   bindInputEvents();
   bindKeyboardEvents();
   bindReadOverEvents();
