@@ -360,40 +360,47 @@ function prepareCanvas() {
   state.totalHeight = state.lines.length * lh;
 }
 
-// Draw the Chomp character — a round face with animated chomping jaw.
-// cx/cy = center, r = radius, mouthOpen = 0 (closed) to 1 (fully open).
-function drawChomp(cx, cy, r, mouthOpen, isDark) {
-  const angle = mouthOpen * 0.38 * Math.PI; // max ~68° opening
+// Draw Chomp facing RIGHT — mouth opens toward the text.
+// cx/cy = center, r = radius, mouthOpen = 0..1
+function drawChomp(cx, cy, r, mouthOpen) {
+  const angle = mouthOpen * 0.36 * Math.PI; // max ~65°
 
-  // Body
   ctx.save();
-  ctx.fillStyle = isDark ? '#f5c518' : '#e6b800';
+  // Rotate so mouth faces right (Pac-Man style, 0° = right)
+  ctx.translate(cx, cy);
+
+  // Body — yellow circle with bite taken out
+  ctx.fillStyle = '#f5c518';
   ctx.beginPath();
-  ctx.arc(cx, cy, r, angle, Math.PI * 2 - angle);
-  ctx.lineTo(cx, cy);
+  ctx.moveTo(0, 0);
+  ctx.arc(0, 0, r, angle, Math.PI * 2 - angle);
   ctx.closePath();
   ctx.fill();
 
-  // Upper teeth (2 small rectangles)
-  if (mouthOpen > 0.15) {
+  // Teeth on the jaw edges
+  if (mouthOpen > 0.1) {
     ctx.fillStyle = '#fff';
-    const toothW = r * 0.22;
-    const toothH = r * 0.18 * mouthOpen;
-    const teethY = cy - r * 0.04;
-    ctx.fillRect(cx - toothW - 1, teethY - toothH, toothW, toothH);
-    ctx.fillRect(cx + 1, teethY - toothH, toothW, toothH);
+    const tw = r * 0.18;
+    const th = r * 0.2 * mouthOpen;
+    const tx = r * 0.35;
+    // upper tooth
+    const uy = -Math.sin(angle) * r * 0.82;
+    ctx.fillRect(tx - tw / 2, uy - th, tw, th);
+    // lower tooth
+    const ly = Math.sin(angle) * r * 0.82;
+    ctx.fillRect(tx - tw / 2, ly, tw, th);
   }
 
-  // Eye
-  ctx.fillStyle = isDark ? '#1a1a1a' : '#222';
+  // Eye (upper-right of body)
+  ctx.fillStyle = '#1a1a1a';
   ctx.beginPath();
-  ctx.arc(cx + r * 0.15, cy - r * 0.45, r * 0.13, 0, Math.PI * 2);
+  ctx.arc(r * 0.1, -r * 0.48, r * 0.14, 0, Math.PI * 2);
   ctx.fill();
 
   // Eye shine
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
   ctx.beginPath();
-  ctx.arc(cx + r * 0.19, cy - r * 0.5, r * 0.05, 0, Math.PI * 2);
+  ctx.arc(r * 0.15, -r * 0.54, r * 0.055, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();
@@ -403,25 +410,24 @@ function renderFrame() {
   const w   = window.innerWidth;
   const h   = window.innerHeight;
   const lh  = getLineHeight();
-  const padding = Math.round(w * 0.08);
-  const x   = padding;
-  const isFisheye  = state.settings.scrollEffect === 'fisheye';
-  const useFisheye = isFisheye && !renderCache.reducedMotion;
-  const center = h / 2;
+  const padding = Math.round(w * 0.06);
 
-  // Background layer
+  // Chomp geometry — top-left, mouth facing right toward text
+  const chompR  = Math.max(20, Math.round(lh * 0.38));
+  const chompX  = chompR + 12;
+  const chompY  = chompR + Math.round(h * 0.04); // 4% from top
+  // Text starts to the right of the mouth
+  const textX   = chompX + chompR + 16;
+  // Clip line: text that rises above chompY disappears into the mouth
+  const clipY   = chompY;
+
+  // ── Background ───────────────────────────────────────────────
   if (state.cameraActive && ui.cameraFeed.readyState >= 2) {
-    // Draw camera frame directly onto canvas (so PiP captures it too)
     ctx.save();
-    // Front camera is naturally mirrored — flip unless mirror mode is on
-    if (!state.settings.mirror) {
-      ctx.translate(w, 0);
-      ctx.scale(-1, 1);
-    }
+    if (!state.settings.mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
     ctx.drawImage(ui.cameraFeed, 0, 0, w, h);
     ctx.restore();
-    // Dark overlay for text legibility
-    ctx.fillStyle = 'rgba(0,0,0,0.58)';
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, w, h);
   } else {
     ctx.fillStyle = renderCache.canvasBg;
@@ -430,73 +436,54 @@ function renderFrame() {
 
   if (!state.lines.length) return;
 
-  // Mirror transform
+  // ── Text (clipped above mouth) ───────────────────────────────
+  ctx.save();
+  // Clip region: only draw text BELOW the mouth's center line
+  ctx.beginPath();
+  ctx.rect(0, clipY, w, h - clipY);
+  ctx.clip();
+
   if (state.settings.mirror) {
-    ctx.save();
     ctx.translate(w, 0);
     ctx.scale(-1, 1);
   }
 
-  const canvasText = renderCache.canvasText;
-  const font = getFont();
+  ctx.font = getFont();
+  ctx.textBaseline = 'middle';
 
   state.lines.forEach((line, i) => {
-    const lineY = i * lh - state.scrollY + h * 0.15; // start 15% from top
+    // Lines scroll upward toward chompY
+    const lineY = chompY + lh * 0.5 + (i * lh) - state.scrollY;
 
-    // Cull lines outside viewport (+/- 2 extra lines for safety)
-    if (lineY + lh < -lh * 2 || lineY > h + lh * 2) return;
+    if (lineY + lh < clipY || lineY - lh > h) return; // cull
 
-    let scale   = 1;
-    let opacity = 1;
+    // Fade out lines that are close to being eaten
+    const distToMouth = lineY - clipY;
+    const opacity = distToMouth < lh
+      ? Math.max(0, distToMouth / lh)
+      : 1;
 
-    if (useFisheye) {
-      const dist = Math.abs((lineY + lh / 2) - center) / h;
-      // Dramatic: center 2x, edges ~0.3x
-      const t = Math.min(1, dist * 2.2);
-      const eased = t * t * (3 - 2 * t); // smoothstep
-      scale   = 1 + (1 - eased) * 1.0;  // 2.0 at center, 1.0 at edge
-      opacity = 1 - eased * 0.9;          // 1.0 at center, 0.1 at edge
-    }
-
-    ctx.save();
     ctx.globalAlpha = opacity;
-
-    if (useFisheye && scale !== 1) {
-      const cy = lineY + lh / 2;
-      ctx.translate(w / 2, cy);
-      ctx.scale(scale, scale);
-      ctx.translate(-w / 2, -cy);
-    }
-
-    ctx.font      = font;
-    ctx.fillStyle = canvasText;
-    ctx.textBaseline = 'top';
-    ctx.fillText(line, x, lineY);
-
-    ctx.restore();
+    ctx.fillStyle   = renderCache.canvasText;
+    ctx.fillText(line, textX, lineY);
   });
 
-  if (state.settings.mirror) ctx.restore();
+  ctx.restore();
 
-  // Chomp character — sits at the reading line (25% from top)
-  const readingY = h * 0.25 + lh / 2;
-  const chompR   = Math.round(lh * 0.42);
-  const chompX   = Math.round(padding * 0.42);
-  const isDark = renderCache.isDark;
-
+  // ── Chomp character ──────────────────────────────────────────
   let mouthOpen;
   if (!state.running) {
-    // Paused: mouth half-open, waiting
-    mouthOpen = 0.5;
+    mouthOpen = 0.45; // waiting, mouth slightly open
   } else {
-    // Chomping: oscillate at ~3Hz tied to real time so it feels alive
-    const t = Date.now() / 1000;
-    mouthOpen = (Math.sin(t * Math.PI * 6) + 1) / 2;
+    // Chomps faster at higher speed
+    const hz = 2 + state.settings.speed * 0.4;
+    const t  = Date.now() / 1000;
+    mouthOpen = (Math.sin(t * Math.PI * 2 * hz) + 1) / 2;
   }
 
-  drawChomp(chompX, readingY, chompR, mouthOpen, isDark);
+  drawChomp(chompX, chompY, chompR, mouthOpen);
 
-  // Progress bar update
+  // ── Progress bar ─────────────────────────────────────────────
   if (state.settings.progress && state.totalHeight > 0) {
     const pct = Math.min(1, state.scrollY / (state.totalHeight - h));
     ui.progressBar.style.width = (pct * 100).toFixed(1) + '%';
