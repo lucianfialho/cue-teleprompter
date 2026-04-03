@@ -350,10 +350,10 @@ button {
 /* ── Article image card ──────────────────────────────────────── */
 .article-card {
   position: absolute;
-  /* Midpoint between header bottom (~80px) and Pac-Man line (50vh) */
-  top: calc(40px + 25vh);
+  /* Anchored just below the scoreboard, never overlaps Pac-Man */
+  top: 90px;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   z-index: 2;
   border-radius: 10px;
   overflow: hidden;
@@ -378,8 +378,9 @@ button {
 .article-card-img {
   display: block;
   width: 80vw;
-  height: calc(80vw * 9 / 16);
-  max-height: calc(50vh - 96px);
+  /* Height grows with image, but never past the Pac-Man line */
+  height: auto;
+  max-height: calc(50svh - 110px);
   object-fit: cover;
 }
 
