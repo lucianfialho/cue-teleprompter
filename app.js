@@ -28,6 +28,8 @@ const DEFAULT_SETTINGS = {
 const state = {
   settings: { ...DEFAULT_SETTINGS },
   script: '',
+  articles: [],        // [{text}] from RSS, fallback = [DEMO_SCRIPT]
+  articleIndex: 0,     // which article is currently playing
   // Prompter runtime state
   running: false,
   lineIndex:    0,     // which line is being eaten
@@ -38,7 +40,7 @@ const state = {
   lastBiteTime: 0,     // performance.now() of last char-consume event
   graphemes: [],       // [{char, width, index}] for active line — grapheme-aware
   cumWidths: [0],      // [0, w0, w0+w1, ...] cumulative pixel widths, O(1) lookup
-  finale: null,        // null | {phase, born, ghostX, chomped, deathT}
+  finale: null,        // null | {phase, born, ghostX, chomped}
 };
 
 // ============================================================
@@ -87,12 +89,39 @@ function saveSettings() {
   localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(state.settings));
 }
 
-const DEMO_SCRIPT =
-`Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo. Quisque sit amet est et sapien ullamcorper pharetra. Vestibulum erat wisi, condimentum sed, commodo vitae, ornare sit amet, wisi. Aenean fermentum, elit eget tincidunt condimentum, eros ipsum rutrum orci, sagittis tempus lacus enim ac dui. Donec non enim in turpis pulvinar facilisis. Ut felis. Praesent dapibus, neque id cursus faucibus, tortor neque egestas augue, eu vulputate magna eros eu erat. Aliquam erat volutpat. Nam dui mi, tincidunt quis, accumsan porttitor, facilisis luctus, metus. Phasellus ultrices nulla quis nibh. Quisque a lectus. Donec consectetuer ligula vulputate sem tristique cursus. Nam nulla quam, gravida non, commodo a, sodales sit amet, nisi. Nullam in massa. Suspendisse vitae nisl sit amet augue bibendum aliquam. Vestibulum nisi lectus, commodo ac, facilisis ac, ultricies eu, pede. Ut orci risus, accumsan porttitor, cursus quis, aliquet eget, justo. Sed pretium blandit orci. Ut eu diam at pede suscipit sodales. Aenean lectus elit, fermentum non, convallis id, sagittis at, neque. Nullam mauris orci, aliquet et, iaculis et, viverra vitae, ligula. Nulla ut felis in purus aliquam imperdiet. Maecenas aliquet mollis lectus. Vivamus consectetuer risus et tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus sit amet semper lacus, in mollis libero. Curabitur commodo sagittis enim. Donec hendrerit sem vel ante lobortis euismod. Curabitur id tortor vitae nulla suscipit tincidunt vitae et arcu. Duis vel lacus at felis vehicula aliquam. Integer eu ante vel purus vehicula pharetra. Maecenas risus risus, condimentum et congue vel, laoreet a lorem.`;
+const DEMO_SCRIPT = `TechCrunch feed unavailable. Pac-Man is hungry but offline. Check your connection and try again. Meanwhile, enjoy this placeholder text as Pac-Man eats every single character until help arrives. Waka waka waka.`;
 
+// Fetch and parse TechCrunch RSS via CORS proxy.
+// Returns array of article strings, or null on failure.
+async function fetchRSSArticles() {
+  try {
+    const FEED = 'https://techcrunch.com/feed/';
+    const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(FEED);
+    const res = await fetch(proxy, { signal: AbortSignal.timeout(9000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const { contents } = await res.json();
+    const doc = new DOMParser().parseFromString(contents, 'text/xml');
+    const items = [...doc.querySelectorAll('item')].slice(0, 25);
+    if (!items.length) throw new Error('No items in feed');
+    return items.map(item => {
+      const title = item.querySelector('title')?.textContent?.trim() ?? '';
+      const rawDesc = item.querySelector('description')?.textContent?.trim() ?? '';
+      const desc = rawDesc
+        .replace(/<[^>]*>/g, '')
+        .replace(/The post .+ appeared first on .+\.$/, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 450);
+      return [title, desc].filter(Boolean).join('. ');
+    }).filter(s => s.length > 10);
+  } catch (e) {
+    console.warn('[EatText] RSS fetch failed:', e.message);
+    return null;
+  }
+}
 
-function loadScript() {
-  state.script = DEMO_SCRIPT;
+function loadCurrentArticle() {
+  state.script = state.articles[state.articleIndex] ?? DEMO_SCRIPT;
 }
 
 let _saveScriptTimer = null;
@@ -638,7 +667,9 @@ function renderFrame() {
   // bitePhase: 0=closed, 0.5=fully open, 1=closed again (one cycle = BITE_DURATION_MS)
   const biteAge   = performance.now() - state.lastBiteTime;
   const bitePhase = Math.min(1, biteAge / BITE_DURATION_MS);
-  const mouthOpen = state.running
+  // During finale ghost-in, jaw does slow anticipatory chomps via a slower timer
+  const finaleRunning = state.finale?.phase === 'ghost-in';
+  const mouthOpen = (state.running || finaleRunning)
     ? Math.pow(Math.sin(bitePhase * Math.PI), 1.6)
     : 0.45;
   const bob = (state.running && !renderCache.reducedMotion)
@@ -735,8 +766,7 @@ function renderFrame() {
   }
 
   // ── Pac-Man — stationary, mouth facing right ─────────────────
-  const deathT = (state.finale?.phase === 'death') ? state.finale.deathT : 0;
-  drawChomp(pacCX, activeY, chompR, mouthOpen, bob, deathT);
+  drawChomp(pacCX, activeY, chompR, mouthOpen, bob);
 
   // ── Crunch particles ─────────────────────────────────────────
   const now = performance.now();
@@ -848,7 +878,8 @@ function scrollLoop() {
 }
 
 // ============================================================
-// Finale — ghost slides in, gets eaten, Pac-Man dies
+// Finale — ghost slides in, gets eaten, next article starts
+// Infinite loop: article N → ghost chomp → article N+1 → …
 // ============================================================
 
 function startFinale() {
@@ -859,7 +890,6 @@ function startFinale() {
     born:    performance.now(),
     ghostX:  window.innerWidth + 80,
     chomped: false,
-    deathT:  0,
   };
   finaleLoop();
 }
@@ -870,39 +900,68 @@ function finaleLoop() {
 
   const now = performance.now();
   const g   = chompGeometry();
-  const ghostTargetX = g.mouthX + g.r * 0.8; // right at the mouth lip
+  // Ghost walks right up to Pac-Man's mouth
+  const ghostTargetX = g.mouthX + g.r * 0.8;
 
   if (f.phase === 'ghost-in') {
-    const GHOST_IN_MS = 1500;
+    // Slow, dramatic walk-in — speed 1 equivalent, 2s total
+    const GHOST_IN_MS = 2000;
     const t    = Math.min(1, (now - f.born) / GHOST_IN_MS);
     const ease = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
     f.ghostX   = window.innerWidth + 80 + (ghostTargetX - (window.innerWidth + 80)) * ease;
+    // Slow anticipatory jaw cycle — one chomp every ~700ms (speed-1 feel)
+    if (!f.lastSlowBite || now - f.lastSlowBite > 700) {
+      f.lastSlowBite = now;
+      state.lastBiteTime = now;
+    }
 
     if (t >= 1) {
       f.phase = 'eat';
       f.born  = now;
+      // Jaw snap + big burst
       state.lastBiteTime = now;
       spawnExplosion(g.mouthX, g.activeY, g.lh);
       spawnCrunch(g.mouthX, g.activeY, g.lh * 0.6);
     }
   } else if (f.phase === 'eat') {
-    if (now - f.born >= 500) {
-      f.phase   = 'death';
-      f.born    = now;
+    // Hold chomp for 600ms, let particles settle
+    if (now - f.born >= 600) {
       f.chomped = true;
-      spawnCrunch(g.mouthX, g.activeY, g.lh * 0.5);
-    }
-  } else if (f.phase === 'death') {
-    f.deathT = Math.min(1, (now - f.born) / 1200);
-    if (f.deathT >= 1) {
-      state.finale = null;
-      renderFrame();
+      // Advance to next article (loop back to 0 when done)
+      state.articleIndex = (state.articleIndex + 1) % state.articles.length;
+      loadCurrentArticle();
+      // Reset prompter for new article
+      prepareCanvas();
+      state.lineIndex    = 0;
+      state.charProgress = 0;
+      state.particles    = [];
+      state.lastBiteTime = 0;
+      state.finale       = null;
+      state.running      = true;
+      scrollLoop();
       return;
     }
   }
 
   renderFrame();
   state.animFrameId = requestAnimationFrame(finaleLoop);
+}
+
+// Draw a "loading" frame on the canvas — used while waiting for RSS fetch.
+function drawLoadingFrame(msg) {
+  const g = chompGeometry();
+  ctx.save();
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, g.w, g.h);
+  // Pac-Man idle
+  drawChomp(g.padding + g.r, g.activeY, g.r, 0.45, 0);
+  // Message below
+  ctx.font = `14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign    = 'center';
+  ctx.fillStyle    = 'rgba(255,255,255,0.3)';
+  ctx.fillText(msg, g.w / 2, g.activeY + g.r * 2.8);
+  ctx.restore();
 }
 
 function togglePause() {
@@ -1072,12 +1131,22 @@ if ('serviceWorker' in navigator) {
 // Boot
 // ============================================================
 
-function init() {
+async function init() {
   loadSettings();
-  loadScript();
   updateRenderCache();
   syncSettingsUI();
   bindKeyboardEvents();
+
+  // Show canvas immediately so the user isn't staring at a black screen
+  showScreen('prompter');
+  resizeCanvas();
+  drawLoadingFrame('Buscando TechCrunch...');
+
+  const articles = await fetchRSSArticles();
+  state.articles = articles?.length ? articles : [DEMO_SCRIPT];
+  state.articleIndex = 0;
+  loadCurrentArticle();
+
   startPrompter();
 }
 
