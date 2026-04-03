@@ -151,7 +151,14 @@ async function fetchFeed(url, source, descClean) {
     // Media image: BBC uses <media:thumbnail>, Verge uses <media:content medium="image">
     const thumbEl   = item.querySelector('thumbnail');
     const contentEl = item.querySelector('content[medium="image"]') ?? item.querySelector('content[type^="image"]');
-    const imageUrl  = thumbEl?.getAttribute('url') ?? contentEl?.getAttribute('url') ?? null;
+    let imageUrl    = thumbEl?.getAttribute('url') ?? contentEl?.getAttribute('url') ?? null;
+    // Fallback: extract first <img> from content HTML (e.g. The Verge Atom <content>)
+    if (!imageUrl) {
+      const contentHtml = item.querySelector('content')?.textContent ?? '';
+      const m = contentHtml.match(/<img[^>]+src="([^"]+)"/);
+      if (m) imageUrl = m[1];
+    }
+    console.log('[FEED]', source, '| image:', imageUrl ?? 'NONE');
     return { text, source, url: articleUrl, image: imageUrl };
   }).filter(a => a.text.length > 5);
 }
@@ -192,9 +199,12 @@ function loadCurrentArticle() {
     state.script = article.text;
     if (ui.articleCard) {
       if (article.image) {
+        console.log('[CARD] showing image:', article.image);
         ui.articleCard.querySelector('img').src = article.image;
+        ui.articleCard.href = article.url || '#';
         ui.articleCard.hidden = false;
       } else {
+        console.log('[CARD] no image for article:', article.text?.slice(0, 40));
         ui.articleCard.hidden = true;
       }
     }

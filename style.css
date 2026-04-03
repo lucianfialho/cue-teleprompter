@@ -350,24 +350,50 @@ button {
 /* ── Article image card ──────────────────────────────────────── */
 .article-card {
   position: absolute;
-  top: 50%;
+  top: 27%;
   left: 50%;
-  transform: translate(-50%, -140%);
+  transform: translate(-50%, -50%);
   z-index: 2;
   border-radius: 10px;
   overflow: hidden;
   opacity: 0.72;
-  pointer-events: none;
+  cursor: pointer;
+  text-decoration: none;
   box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.article-card:hover {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.01);
+}
+
+.article-card:hover .article-card-link {
+  opacity: 1;
 }
 
 .article-card[hidden] { display: none; }
 
 .article-card-img {
   display: block;
-  width: 220px;
-  height: 124px;
+  width: 80vw;
+  height: calc(80vw * 9 / 16);
   object-fit: cover;
+}
+
+.article-card-link {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-family: var(--arcade-font);
+  font-size: 10px;
+  letter-spacing: 2px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 /* ── Arcade Marquee ─────────────────────────────────────────── */
