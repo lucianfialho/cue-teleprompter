@@ -52,6 +52,8 @@ const screens = {
 
 const ui = {
   cameraFeed:      $('camera-feed'),
+  pipVideo:        $('pip-video'),
+  btnPip:          $('btn-pip'),
   btnCamera:       $('btn-camera'),
   scriptInput:     $('script-input'),
   btnStart:        $('btn-start'),
@@ -241,6 +243,7 @@ function bindInputEvents() {
   ui.btnStart.addEventListener('click', startPrompter);
   ui.btnExit.addEventListener('click', exitPrompter);
   ui.btnCamera.addEventListener('click', toggleCamera);
+  ui.btnPip.addEventListener('click', togglePiP);
 }
 
 // ============================================================
@@ -499,30 +502,65 @@ function togglePause() {
 
 // ============================================================
 // Touch gestures on canvas
+// 1-finger: tap = pause, swipe up/down = speed
+// 2-finger: pinch = font size
 // ============================================================
 
-let _touchStartY = null;
-let _touchStartSpeed = null;
+let _touch1Y = null;
+let _touch1Speed = null;
+let _pinchDist = null;
+let _pinchFontSize = null;
+
+function getTouchDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
 ui.canvas.addEventListener('touchstart', (e) => {
-  _touchStartY     = e.touches[0].clientY;
-  _touchStartSpeed = state.settings.speed;
+  if (e.touches.length === 2) {
+    _pinchDist     = getTouchDist(e.touches);
+    _pinchFontSize = state.settings.fontSize;
+    _touch1Y = null; // cancel 1-finger tracking
+  } else {
+    _touch1Y     = e.touches[0].clientY;
+    _touch1Speed = state.settings.speed;
+    _pinchDist   = null;
+  }
 }, { passive: true });
 
 ui.canvas.addEventListener('touchend', (e) => {
-  // If moved less than 10px = tap → toggle pause
-  if (_touchStartY !== null && Math.abs(e.changedTouches[0].clientY - _touchStartY) < 10) {
+  if (_pinchDist !== null) {
+    _pinchDist = null;
+    return;
+  }
+  // tap = moved less than 10px
+  if (_touch1Y !== null && Math.abs(e.changedTouches[0].clientY - _touch1Y) < 10) {
     togglePause();
   }
-  _touchStartY = null;
+  _touch1Y = null;
 }, { passive: true });
 
 ui.canvas.addEventListener('touchmove', (e) => {
-  if (_touchStartY === null) return;
-  const dy = _touchStartY - e.touches[0].clientY;
-  // Every 30px drag = 1 speed unit
+  // 2-finger pinch → font size
+  if (e.touches.length === 2 && _pinchDist !== null) {
+    const dist  = getTouchDist(e.touches);
+    const scale = dist / _pinchDist;
+    const newSize = Math.round(Math.max(24, Math.min(96, _pinchFontSize * scale)));
+    if (newSize !== state.settings.fontSize) {
+      state.settings.fontSize = newSize;
+      ui.sliderFontSize.value = newSize;
+      ui.fontSizeValue.textContent = newSize + 'px';
+      saveSettings();
+      prepareCanvas();
+    }
+    return;
+  }
+  // 1-finger swipe → speed
+  if (_touch1Y === null) return;
+  const dy    = _touch1Y - e.touches[0].clientY;
   const delta = Math.round(dy / 30);
-  const newSpeed = Math.max(1, Math.min(10, _touchStartSpeed + delta));
+  const newSpeed = Math.max(1, Math.min(10, _touch1Speed + delta));
   if (newSpeed !== state.settings.speed) {
     state.settings.speed = newSpeed;
     saveSettings();
@@ -567,6 +605,39 @@ function toggleCamera() {
   if (state.cameraActive) stopCamera();
   else startCamera();
 }
+
+// ============================================================
+// Picture-in-Picture (canvas stream)
+// ============================================================
+
+async function enterPiP() {
+  if (!document.pictureInPictureEnabled) return;
+  try {
+    // Capture canvas at 30fps → pipe into hidden video → PiP
+    const stream = ui.canvas.captureStream(30);
+    ui.pipVideo.srcObject = stream;
+    await ui.pipVideo.play();
+    await ui.pipVideo.requestPictureInPicture();
+    ui.btnPip.setAttribute('aria-pressed', 'true');
+  } catch (_) {}
+}
+
+async function exitPiP() {
+  if (document.pictureInPictureElement) {
+    await document.exitPictureInPicture().catch(() => {});
+  }
+  ui.btnPip.setAttribute('aria-pressed', 'false');
+}
+
+async function togglePiP() {
+  if (document.pictureInPictureElement) exitPiP();
+  else enterPiP();
+}
+
+// Sync button state if user closes PiP via browser UI
+document.addEventListener('leavepictureinpicture', () => {
+  ui.btnPip.setAttribute('aria-pressed', 'false');
+});
 
 // ============================================================
 // Fullscreen helpers
@@ -656,6 +727,10 @@ function init() {
   bindInputEvents();
   bindSettingsEvents();
   bindKeyboardEvents();
+  // Hide PiP button on browsers that don't support it (e.g. iOS Safari, Firefox)
+  if (!document.pictureInPictureEnabled) {
+    ui.btnPip.style.display = 'none';
+  }
   showScreen('input');
 }
 
