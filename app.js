@@ -493,14 +493,38 @@ function renderFrame() {
   const pacCX       = padding + chompR;                                 // fixed
   const textOriginX = mouthX - eatenWidth - charSubPhase * currentCharW; // scrolls left
 
-  // Show only uneaten portion (right of mouth)
+  // ── Upcoming text (chars after current) — hard clip at mouth ────
+  const upcomingText = activeLine.text.substring(eatenCount + 1);
+  const upcomingX    = mouthX + (1 - charSubPhase) * currentCharW;
   ctx.save();
   ctx.beginPath();
   ctx.rect(mouthX, 0, w - mouthX, h);
   ctx.clip();
   ctx.fillStyle = '#f0f0f0';
-  ctx.fillText(activeLine.text, textOriginX, activeY + bob);
+  ctx.fillText(upcomingText, upcomingX, activeY + bob);
   ctx.restore();
+
+  // ── Current char: shrinks + fades + turns yellow as it's eaten ───
+  if (currentChar) {
+    const eatT  = charSubPhase;                          // 0=entering mouth, 1=swallowed
+    const charLX = mouthX - eatT * currentCharW;         // left edge scrolls into mouth
+    if (charLX + currentCharW > mouthX) {                // still at least partially visible
+      const cx  = charLX + currentCharW / 2;
+      const scl = 1 - eatT * 0.35;                       // shrinks to 65%
+      const alp = 1 - eatT * 0.85;                       // fades to 15%
+      // Interpolate white → Pac-Man yellow as char is consumed
+      const cr = Math.round(240 + eatT * (245 - 240));
+      const cg = Math.round(240 + eatT * (197 - 240));
+      const cb = Math.round(240 + eatT * ( 24 - 240));
+      ctx.save();
+      ctx.globalAlpha = alp;
+      ctx.fillStyle   = `rgb(${cr},${cg},${cb})`;
+      ctx.translate(cx, activeY + bob);
+      ctx.scale(scl, scl);
+      ctx.fillText(currentChar, -currentCharW / 2, 0);
+      ctx.restore();
+    }
+  }
 
   if (state.settings.mirror) ctx.restore();
 
