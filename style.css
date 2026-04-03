@@ -350,9 +350,9 @@ button {
 /* ── Source badge (favicon + open article link) ─────────────── */
 .source-badge {
   position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 96px; /* below marquee (~44px) + scoreboard (~35px) + 16px margin */
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 12;
   display: flex;
   flex-direction: column;
