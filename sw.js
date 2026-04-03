@@ -8,6 +8,7 @@ const PRECACHE_ASSETS = [
   '/index.html',
   '/style.css',
   '/app.js',
+  '/arcade.js',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',

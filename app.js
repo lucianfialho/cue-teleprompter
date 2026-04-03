@@ -1019,17 +1019,21 @@ function renderFrame() {
   updateHUD();
 }
 
-function scrollLoop() {
+let _scrollLastTime = 0;
+
+function scrollLoop(now = performance.now()) {
   if (!state.running) return;
 
   const activeLine = state.lines[state.lineIndex];
   if (!activeLine) { state.running = false; return; }
 
-  // Characters per second: comfortable reading pace at speed 4 (~75 WPM)
-  // speed 1 = ~30 WPM, speed 10 = ~160 WPM
+  // Use actual elapsed time so speed is correct on 120Hz+ displays
+  const deltaMs = _scrollLastTime ? Math.min(now - _scrollLastTime, 100) : 16.67;
+  _scrollLastTime = now;
+
   const wpm           = 150 + (state.settings.speed - 1) / 9 * 450;
   const charsPerSec   = wpm * 5 / 60; // 5 avg chars per word
-  const charsPerFrame = charsPerSec / 60;
+  const charsPerFrame = charsPerSec * (deltaMs / 1000);
 
   const prevFloor = Math.floor(state.charProgress);
   state.charProgress += charsPerFrame;
@@ -1293,6 +1297,45 @@ ui.canvas.addEventListener('touchmove', (e) => {
 }, { passive: true });
 
 // ============================================================
+// Wheel / trackpad gestures (desktop)
+// scroll up/down = speed, Ctrl+scroll = font size
+// ============================================================
+
+let _wheelSpeedAcc = 0;
+let _wheelFontAcc  = 0;
+
+ui.canvas.addEventListener('wheel', (e) => {
+  if (!screens.prompter.classList.contains('active')) return;
+  e.preventDefault();
+
+  if (e.ctrlKey) {
+    // Ctrl+scroll → font size (pinch equivalent)
+    _wheelFontAcc += e.deltaY;
+    const steps = Math.trunc(_wheelFontAcc / 20);
+    if (steps === 0) return;
+    _wheelFontAcc -= steps * 20;
+    const newSize = Math.max(24, Math.min(96, state.settings.fontSize - steps));
+    if (newSize !== state.settings.fontSize) {
+      state.settings.fontSize = newSize;
+      if (ui.ahudFontVal) ui.ahudFontVal.textContent = `Aa ${newSize}`;
+      saveSettings();
+    }
+  } else {
+    // Scroll up/down → speed
+    _wheelSpeedAcc += e.deltaY;
+    const steps = Math.trunc(_wheelSpeedAcc / 40);
+    if (steps === 0) return;
+    _wheelSpeedAcc -= steps * 40;
+    const newSpeed = Math.max(1, Math.min(10, state.settings.speed + Math.sign(steps)));
+    if (newSpeed !== state.settings.speed) {
+      state.settings.speed = newSpeed;
+      saveSettings();
+      notifySpeedChange();
+    }
+  }
+}, { passive: false });
+
+// ============================================================
 // Fullscreen helpers
 // ============================================================
 
@@ -1328,6 +1371,7 @@ function startPrompter() {
   state.charProgress = 0;
   state.particles    = [];
   state.lastBiteTime = 0;
+  _scrollLastTime    = 0;
   rebuildGraphemes();
   notifySpeedChange();
   state.running      = true;
@@ -1336,15 +1380,14 @@ function startPrompter() {
   });
   scrollLoop();
 
-  requestFullscreen(document.documentElement).catch(() => {});
 }
+
 
 function exitPrompter() {
   state.running = false;
   state.finale  = null;
   cancelAnimationFrame(state.animFrameId);
   hideReadOver();
-  exitFullscreen().catch(() => {});
   showScreen('input');
 }
 
