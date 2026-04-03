@@ -427,38 +427,39 @@ function chompGeometry() {
 function spawnCrunch(x, y, spread) {
   if (renderCache.reducedMotion) return;
   const now = performance.now();
-  for (let i = 0; i < 8; i++) {
-    const angle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.8;
-    const speed = 80 + Math.random() * 180;
+  for (let i = 0; i < 14; i++) {
+    const angle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.9;
+    const speed = 120 + Math.random() * 260;
     state.particles.push({
       x,
       y: y + (Math.random() - 0.5) * spread,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      r:  Math.round(3 + Math.random() * 7),
+      r:  Math.round(4 + Math.random() * 8),
       color: Math.random() > 0.45 ? '#ffffff' : '#f5c518',
       born: now,
-      life: 280 + Math.random() * 180,
+      life: 350 + Math.random() * 250,
     });
   }
 }
 
-// Tiny bite crunch at the current mouth X/Y position.
+// Bite crunch — fires on every char consumed.
 function spawnBiteCrunch(x, y, spread) {
   if (renderCache.reducedMotion) return;
   const now = performance.now();
-  for (let i = 0; i < 3; i++) {
-    const angle = Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.9; // mostly up/down
-    const speed = 30 + Math.random() * 70;
+  for (let i = 0; i < 6; i++) {
+    // Mostly upward/downward fan, slight leftward bias (going into the mouth)
+    const angle = Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.1;
+    const speed = 60 + Math.random() * 140;
     state.particles.push({
-      x: x + (Math.random() - 0.5) * spread * 0.3,
-      y: y + (Math.random() - 0.5) * spread * 0.5,
-      vx: Math.cos(angle) * speed,
+      x: x + (Math.random() - 0.5) * spread * 0.2,
+      y: y + (Math.random() - 0.5) * spread * 0.6,
+      vx: Math.cos(angle) * speed - 20, // slight leftward drift
       vy: Math.sin(angle) * speed,
-      r:  Math.round(2 + Math.random() * 3),
-      color: Math.random() > 0.5 ? '#ffffff' : '#f5c518',
+      r:  Math.round(2 + Math.random() * 4),
+      color: Math.random() > 0.4 ? '#ffffff' : '#f5c518',
       born: now,
-      life: 140 + Math.random() * 80,
+      life: 180 + Math.random() * 120,
     });
   }
 }
@@ -560,15 +561,12 @@ function scrollLoop() {
   state.charProgress += charsPerFrame;
   const newFloor  = Math.floor(state.charProgress);
 
-  // Trigger jaw bite + crunch particles on each char consumed
+  // Trigger jaw bite + crunch particles on every char consumed
   if (newFloor > prevFloor) {
-    state.lastBiteTime = performance.now(); // fires the jaw animation
+    state.lastBiteTime = performance.now();
     const g = chompGeometry();
     for (let ci = prevFloor; ci < newFloor && ci < activeLine.text.length; ci++) {
-      const ch = activeLine.text[ci];
-      if (ch === ' ' || ch === '.' || ch === ',' || ch === '!' || ch === '?') {
-        spawnBiteCrunch(g.mouthX, g.activeY, g.lh);
-      }
+      spawnBiteCrunch(g.mouthX, g.activeY, g.lh);
     }
   }
 
