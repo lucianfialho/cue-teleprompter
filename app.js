@@ -81,7 +81,6 @@ const ui = {
   arcadeGameoverCount: $('arcade-gameover-count'),
   btnNextArticle:  $('btn-next-article'),
   btnGameOver:     $('btn-game-over'),
-  sourceBadge:     $('source-badge'),
 };
 
 // ============================================================
@@ -185,15 +184,8 @@ function loadCurrentArticle() {
   const article = state.articles[state.articleIndex];
   if (article && typeof article === 'object') {
     state.script = article.text;
-    if (ui.sourceBadge) {
-      const img = ui.sourceBadge.querySelector('img');
-      if (img) img.src = `https://www.google.com/s2/favicons?domain=${article.source}&sz=64`;
-      ui.sourceBadge.href = article.url || '#';
-      ui.sourceBadge.hidden = !article.url;
-    }
   } else {
     state.script = article ?? DEMO_SCRIPT;
-    if (ui.sourceBadge) ui.sourceBadge.hidden = true;
   }
 }
 
