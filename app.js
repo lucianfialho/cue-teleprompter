@@ -1407,6 +1407,8 @@ function exitFullscreen() {
 // ============================================================
 
 function startPrompter() {
+  cancelAnimationFrame(state.animFrameId);
+  state.finale       = null;
   showScreen('prompter');
   hideReadOver();
   resizeCanvas();
@@ -1423,7 +1425,6 @@ function startPrompter() {
     dispatchEvent(new CustomEvent('eat:session-start'));
   });
   scrollLoop();
-
 }
 
 
