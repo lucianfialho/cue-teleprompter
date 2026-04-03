@@ -350,17 +350,24 @@ button {
 /* ── Source badge (favicon + open article link) ─────────────── */
 .source-badge {
   position: absolute;
-  top: 96px; /* below marquee (~44px) + scoreboard (~35px) + 16px margin */
+  /* Vertically centered in the canvas area, just above the reading line */
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, calc(-50% - 64px));
   z-index: 12;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   text-decoration: none;
-  opacity: 0.35;
+  opacity: 0.75;
   transition: opacity var(--t-fast);
+  background: rgba(30, 30, 30, 0.88);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 12px;
+  padding: 10px 14px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .source-badge:hover,
@@ -377,20 +384,20 @@ button {
 .source-badge[hidden] { display: none; }
 
 .source-badge-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 2px solid var(--arcade-cyan);
-  box-shadow: 0 0 8px var(--arcade-cyan), 0 0 20px rgba(0,255,255,0.2);
-  background: var(--arcade-hud-bg);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
   object-fit: cover;
+  image-rendering: auto;
 }
 
 .source-badge-label {
-  font-size: 8px;
-  color: var(--arcade-cyan);
+  font-size: 7px;
+  color: rgba(255,255,255,0.5);
   font-family: var(--arcade-font);
-  text-shadow: 0 0 6px var(--arcade-cyan);
+  letter-spacing: 1px;
 }
 
 /* ── Arcade Marquee ─────────────────────────────────────────── */
@@ -429,14 +436,6 @@ button {
   letter-spacing: 2px;
 }
 
-.arcade-source-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 3px;
-  image-rendering: pixelated;
-  filter: drop-shadow(0 0 4px var(--arcade-cyan));
-  flex-shrink: 0;
-}
 
 .arcade-lives {
   display: flex;

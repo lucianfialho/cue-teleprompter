@@ -81,7 +81,6 @@ const ui = {
   arcadeGameoverCount: $('arcade-gameover-count'),
   btnNextArticle:  $('btn-next-article'),
   btnGameOver:     $('btn-game-over'),
-  sourceIcon:      $('arcade-source-icon'),
   sourceBadge:     $('source-badge'),
 };
 
@@ -102,8 +101,8 @@ function saveSettings() {
 
 const DEMO_SCRIPT = `Loading your news feed. Fetching the latest from The Verge and BBC Tech. Pac-Man is already hungry. Stories incoming. Waka waka waka.`;
 
-// Fetch RSS via our own Vercel API proxy (primary) or CORS proxies (fallback).
-// Individual timeout: 8s. If all fail, throws AggregateError.
+// Fetch RSS via own Vercel API proxy first; fall back to external proxies
+// only when running without vercel dev (plain local server / file://).
 async function fetchRaw(url) {
   const enc = encodeURIComponent(url);
   const attempt = async (proxyUrl, extract) => {
@@ -114,17 +113,19 @@ async function fetchRaw(url) {
     return body;
   };
 
-  return Promise.any([
-    // Own Vercel proxy — server-side, no CORS issues (works in production)
-    attempt('/api/rss?url=' + enc, r => r.text()),
-    // External fallbacks (for local dev or if api route fails)
-    attempt('https://api.codetabs.com/v1/proxy?quest=' + enc, r => r.text()),
-    attempt(
-      'https://api.allorigins.win/get?url=' + enc,
-      async r => { const j = await r.json(); return j.contents; }
-    ),
-    attempt('https://corsproxy.io/?' + enc, r => r.text()),
-  ]);
+  // Primary: own server-side proxy (no CORS, works on Vercel + vercel dev)
+  try {
+    return await attempt('/api/rss?url=' + enc, r => r.text());
+  } catch {
+    // Fallback: external proxies (local dev without vercel dev)
+    return Promise.any([
+      attempt('https://api.codetabs.com/v1/proxy?quest=' + enc, r => r.text()),
+      attempt(
+        'https://api.allorigins.win/get?url=' + enc,
+        async r => { const j = await r.json(); return j.contents; }
+      ),
+    ]);
+  }
 }
 
 // Generic RSS fetch with multi-proxy fallback.
@@ -184,20 +185,14 @@ function loadCurrentArticle() {
   const article = state.articles[state.articleIndex];
   if (article && typeof article === 'object') {
     state.script = article.text;
-    if (ui.sourceIcon) {
-      ui.sourceIcon.src = `https://www.google.com/s2/favicons?domain=${article.source}&sz=32`;
-      ui.sourceIcon.alt = article.source;
-      ui.sourceIcon.hidden = false;
-    }
     if (ui.sourceBadge) {
       const img = ui.sourceBadge.querySelector('img');
-      if (img) img.src = `https://www.google.com/s2/favicons?domain=${article.source}&sz=32`;
+      if (img) img.src = `https://www.google.com/s2/favicons?domain=${article.source}&sz=64`;
       ui.sourceBadge.href = article.url || '#';
       ui.sourceBadge.hidden = !article.url;
     }
   } else {
     state.script = article ?? DEMO_SCRIPT;
-    if (ui.sourceIcon) ui.sourceIcon.hidden = true;
     if (ui.sourceBadge) ui.sourceBadge.hidden = true;
   }
 }

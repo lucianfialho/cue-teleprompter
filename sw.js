@@ -1,7 +1,7 @@
 // EatText — Service Worker
 // Cache-first strategy for static assets, no Workbox.
 
-const CACHE_NAME = 'eattext-v2';
+const CACHE_NAME = 'eattext-v3';
 
 const PRECACHE_ASSETS = [
   '/',
