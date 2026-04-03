@@ -478,6 +478,76 @@ function spawnBiteCrunch(x, y, spread, ch) {
   }
 }
 
+// Speed-wind streaks trailing behind Pac-Man — intensity = speed setting.
+function drawWindLines(cx, cy, r, speed) {
+  const intensity = Math.max(0, (speed - 1) / 9); // 0 at speed 1, 1 at speed 10
+  if (intensity < 0.06 || renderCache.reducedMotion) return;
+  const t     = Date.now() / 1000;
+  const count = Math.round(2 + intensity * 7); // 2–9 lines
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < count; i++) {
+    const seed  = i * 1.618;
+    // Y: sine wobble gives organic spread around Pac-Man
+    const yOff  = Math.sin(seed * 2.9) * r * 1.5 + Math.cos(t * (0.4 + intensity * 0.8) + seed) * r * 0.25;
+    // Phase animates each line independently — appears, stretches, fades
+    const phase = ((seed * 0.41 + t * intensity * 0.55) % 1);
+    const len   = r * (0.6 + intensity * 3.5) * (0.25 + (1 - phase) * 0.75);
+    const alpha = intensity * 0.28 * phase * (1 - phase * 0.6);
+    if (alpha < 0.015) continue;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = '#d8d8d8';
+    ctx.lineWidth   = 0.4 + intensity * 1.6 * (1 - phase * 0.6);
+    const startX = cx - r - phase * r * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(startX, cy + yOff);
+    ctx.lineTo(startX - len, cy + yOff);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Minimal HUD: speed bar + font size + control hints.
+function drawHUD(w, speed, fontSize) {
+  const barH = 36;
+  const pad  = 14;
+  const midY = barH / 2;
+  ctx.save();
+  // Backdrop
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.fillRect(0, 0, w, barH);
+  ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textBaseline = 'middle';
+  // "vel" label
+  ctx.fillStyle = 'rgba(255,255,255,0.38)';
+  ctx.textAlign = 'left';
+  ctx.fillText('vel', pad, midY);
+  // Speed mini-bar
+  const bX = pad + 26;
+  const bW = 64;
+  const bH = 3;
+  const bY = midY - bH / 2;
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.beginPath();
+  ctx.roundRect(bX, bY, bW, bH, 2);
+  ctx.fill();
+  ctx.fillStyle = '#f5c518';
+  ctx.beginPath();
+  ctx.roundRect(bX, bY, Math.max(4, bW * ((speed - 1) / 9)), bH, 2);
+  ctx.fill();
+  // Speed number
+  ctx.fillStyle = 'rgba(255,255,255,0.38)';
+  ctx.fillText(speed, bX + bW + 8, midY);
+  // Font size
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillText(`${fontSize}px`, bX + bW + 26, midY);
+  // Hints — right side
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillText('↕ speed  ·  \uD83E\uDD0F font', w - pad, midY);
+  ctx.restore();
+}
+
 function renderFrame() {
   const g = chompGeometry();
   const { w, h, lh, r: chompR, padding, activeY, mouthX } = g;
@@ -498,6 +568,9 @@ function renderFrame() {
   // ── Background ───────────────────────────────────────────────
   ctx.fillStyle = '#0a0a0a';
   ctx.fillRect(0, 0, w, h);
+
+  // ── Wind lines (drawn before text so they're behind everything) ──
+  if (state.running) drawWindLines(padding + chompR, activeY, chompR, state.settings.speed);
 
   if (!state.lines.length) return;
 
@@ -593,6 +666,9 @@ function renderFrame() {
     const pct = Math.min(1, state.lineIndex / state.lines.length);
     ui.progressBar.style.width = (pct * 100).toFixed(1) + '%';
   }
+
+  // ── HUD (on top of everything) ────────────────────────────────
+  drawHUD(w, state.settings.speed, state.settings.fontSize);
 }
 
 function scrollLoop() {
