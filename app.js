@@ -115,12 +115,37 @@ function scheduleSaveScript() {
 }
 
 // ============================================================
-// Theme
+// Theme + render cache
+// Computed style reads are expensive — cache and update only on theme change.
 // ============================================================
+
+const renderCache = {
+  canvasBg:     '#0a0a0a',
+  canvasText:   '#f0f0f0',
+  isDark:       true,
+  reducedMotion: false,
+};
+
+function updateRenderCache() {
+  const style = getComputedStyle(document.documentElement);
+  renderCache.canvasBg   = style.getPropertyValue('--canvas-bg').trim()   || '#0a0a0a';
+  renderCache.canvasText = style.getPropertyValue('--canvas-text').trim() || '#f0f0f0';
+  const theme = state.settings.theme;
+  renderCache.isDark = theme === 'dark' ? true
+    : theme === 'light' ? false
+    : !window.matchMedia('(prefers-color-scheme: light)').matches;
+  renderCache.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
+  // Defer one tick so CSS vars resolve before we read them
+  requestAnimationFrame(updateRenderCache);
 }
+
+// Keep reduced-motion cache in sync
+window.matchMedia('(prefers-reduced-motion: reduce)')
+  .addEventListener('change', updateRenderCache);
 
 // ============================================================
 // Screen navigation
@@ -383,9 +408,8 @@ function renderFrame() {
   const lh  = getLineHeight();
   const padding = Math.round(w * 0.08);
   const x   = padding;
-  const isFisheye   = state.settings.scrollEffect === 'fisheye';
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const useFisheye  = isFisheye && !reducedMotion;
+  const isFisheye  = state.settings.scrollEffect === 'fisheye';
+  const useFisheye = isFisheye && !renderCache.reducedMotion;
   const center = h / 2;
 
   // Background layer
@@ -403,8 +427,7 @@ function renderFrame() {
     ctx.fillStyle = 'rgba(0,0,0,0.58)';
     ctx.fillRect(0, 0, w, h);
   } else {
-    ctx.fillStyle = getComputedStyle(document.documentElement)
-      .getPropertyValue('--canvas-bg').trim() || '#0a0a0a';
+    ctx.fillStyle = renderCache.canvasBg;
     ctx.fillRect(0, 0, w, h);
   }
 
@@ -417,8 +440,7 @@ function renderFrame() {
     ctx.scale(-1, 1);
   }
 
-  const canvasText = getComputedStyle(document.documentElement)
-    .getPropertyValue('--canvas-text').trim() || '#f0f0f0';
+  const canvasText = renderCache.canvasText;
   const font = getFont();
 
   state.lines.forEach((line, i) => {
@@ -463,9 +485,7 @@ function renderFrame() {
   const readingY = h * 0.25 + lh / 2;
   const chompR   = Math.round(lh * 0.42);
   const chompX   = Math.round(padding * 0.42);
-  const isDark   = (state.settings.theme === 'light') ? false
-    : (state.settings.theme === 'dark') ? true
-    : !window.matchMedia('(prefers-color-scheme: light)').matches;
+  const isDark = renderCache.isDark;
 
   let mouthOpen;
   if (!state.running) {
@@ -511,6 +531,12 @@ function togglePause() {
     state.running = true;
     scrollLoop();
   }
+}
+
+let _prepareTimer = null;
+function schedulePrepareCanvas() {
+  clearTimeout(_prepareTimer);
+  _prepareTimer = setTimeout(prepareCanvas, 80);
 }
 
 // ============================================================
@@ -565,7 +591,7 @@ ui.canvas.addEventListener('touchmove', (e) => {
       ui.sliderFontSize.value = newSize;
       ui.fontSizeValue.textContent = newSize + 'px';
       saveSettings();
-      prepareCanvas();
+      schedulePrepareCanvas();
     }
     return;
   }
@@ -734,6 +760,7 @@ if ('serviceWorker' in navigator) {
 function init() {
   loadSettings();
   loadScript();
+  updateRenderCache();
   syncSettingsUI();
   bindInputEvents();
   bindSettingsEvents();
