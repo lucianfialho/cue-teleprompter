@@ -350,8 +350,8 @@ button {
 /* ── Article image card ──────────────────────────────────────── */
 .article-card {
   position: absolute;
-  /* Anchored just below the scoreboard, never overlaps Pac-Man */
-  top: 90px;
+  /* Bottom edge sits 20px above Pac-Man (activeY = 50% of screen) */
+  bottom: calc(50% + 20px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
