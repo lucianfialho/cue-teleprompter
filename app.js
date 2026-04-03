@@ -29,11 +29,11 @@ const state = {
   script: '',
   // Prompter runtime state
   running: false,
-  scrollX: 0,
-  totalWidth: 0,
-  animFrameId: null,
-  words: [],
-  particles: [],   // crunch debris
+  lineIndex:    0,     // which line is being eaten
+  charProgress: 0.0,   // chars consumed from active line (float, sub-char smooth)
+  animFrameId:  null,
+  lines: [],           // [{text}]
+  particles: [],       // crunch debris
   // Camera
   cameraStream: null,
   cameraActive: false,
@@ -282,13 +282,11 @@ function bindKeyboardEvents() {
         e.preventDefault();
         togglePause();
         break;
-      case 'ArrowRight':
       case 'ArrowUp':
         e.preventDefault();
         state.settings.speed = Math.min(10, state.settings.speed + 1);
         saveSettings();
         break;
-      case 'ArrowLeft':
       case 'ArrowDown':
         e.preventDefault();
         state.settings.speed = Math.max(1, state.settings.speed - 1);
@@ -329,34 +327,33 @@ function resizeCanvas() {
   ctx.scale(dpr, dpr);
 }
 
-// Build flat word list with x positions for horizontal scroll.
-// Each word is rendered as a rounded pill — padX/padY define the pill insets.
-function buildWords(text) {
-  ctx.font = getFont();
-  const fs      = state.settings.fontSize;
-  const padX    = Math.round(fs * 0.42);  // horizontal pill padding
-  const padY    = Math.round(fs * 0.22);  // vertical pill padding → pill height = fs + 2*padY
-  const wordGap = Math.round(fs * 0.55);  // gap between pills
-  const paraGap = Math.round(fs * 1.4);   // paragraph break gap
-  let x = 0;
-  state.words = [];
+// Word-wrap text into lines, handling explicit newlines as paragraph breaks.
+function buildLines(text, font, maxWidth) {
+  ctx.font = font;
+  const result = [];
   for (const para of text.split('\n')) {
-    const raw = para.trim().split(/\s+/).filter(Boolean);
-    if (!raw.length) { x += paraGap; continue; }
-    for (const word of raw) {
-      const tw    = ctx.measureText(word).width;
-      const pillW = tw + padX * 2;
-      state.words.push({ text: word, x, width: tw, pillW, padX, padY, eaten: false });
-      x += pillW + wordGap;
+    if (!para.trim()) { result.push({ text: '' }); continue; }
+    const words = para.split(/\s+/).filter(Boolean);
+    let current = '';
+    for (const word of words) {
+      const candidate = current ? current + ' ' + word : word;
+      if (current && ctx.measureText(candidate).width > maxWidth) {
+        result.push({ text: current });
+        current = word;
+      } else {
+        current = candidate;
+      }
     }
-    x += paraGap - wordGap;
+    if (current) result.push({ text: current });
   }
-  state.totalWidth = x;
+  return result;
 }
 
 function prepareCanvas() {
   if (!state.script.trim()) return;
-  buildWords(state.script);
+  const padding  = Math.round(window.innerWidth * 0.06);
+  const maxWidth = window.innerWidth - padding * 2;
+  state.lines = buildLines(state.script, getFont(), maxWidth);
 }
 
 // Draw Chomp facing RIGHT — mouth opens toward the text.
@@ -421,52 +418,82 @@ function drawChomp(cx, cy, r, mouthOpen, bob) {
   ctx.restore();
 }
 
-// Spawn crunch debris particles at the mouth when a pill gets eaten.
-function spawnCrunch(x, y, pillH) {
+// Compute Pac-Man mouth position from current window dimensions.
+function mouthPos() {
+  const w  = window.innerWidth;
+  const h  = window.innerHeight;
+  const lh = getLineHeight();
+  const r  = Math.round(Math.min(w * 0.12, lh * 0.88, 60));
+  return {
+    x: r + Math.round(w * 0.03) + r, // chompX + r = right edge of mouth
+    y: r + Math.round(h * 0.04),     // chompY
+    r,
+    lh,
+  };
+}
+
+// Spawn crunch debris particles (line-end, big burst).
+function spawnCrunch(x, y, spread) {
   if (renderCache.reducedMotion) return;
   const now = performance.now();
-  const count = 8;
-  for (let i = 0; i < count; i++) {
-    // Scatter mostly leftward (behind Pac-Man) with a spread
-    const angle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.75;
+  for (let i = 0; i < 8; i++) {
+    const angle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.8;
     const speed = 80 + Math.random() * 180;
     state.particles.push({
       x,
-      y: y + (Math.random() - 0.5) * pillH * 0.7,
+      y: y + (Math.random() - 0.5) * spread,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       r:  Math.round(3 + Math.random() * 7),
       color: Math.random() > 0.45 ? '#ffffff' : '#f5c518',
       born: now,
-      life: 280 + Math.random() * 180, // ms
+      life: 280 + Math.random() * 180,
+    });
+  }
+}
+
+// Small crunch at word boundary (2-3 tiny particles).
+function spawnWordCrunch() {
+  if (renderCache.reducedMotion) return;
+  const mp  = mouthPos();
+  const now = performance.now();
+  for (let i = 0; i < 3; i++) {
+    const angle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.6;
+    const speed = 40 + Math.random() * 80;
+    state.particles.push({
+      x: mp.x,
+      y: mp.y + (Math.random() - 0.5) * mp.lh * 0.4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      r:  Math.round(2 + Math.random() * 3),
+      color: Math.random() > 0.5 ? '#ffffff' : '#f5c518',
+      born: now,
+      life: 160 + Math.random() * 100,
     });
   }
 }
 
 function renderFrame() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  const lh = getLineHeight();
+  const w       = window.innerWidth;
+  const h       = window.innerHeight;
+  const lh      = getLineHeight();
+  const padding = Math.round(w * 0.06);
 
-  // Pac-Man: fixed on left side, vertically centered
-  const chompR = Math.round(Math.min(w * 0.11, lh * 0.85, 64));
-  const chompX = chompR + Math.round(w * 0.04);
-  const chompY = Math.round(h * 0.45);
+  // Pac-Man: top-left, mouth faces right
+  const chompR = Math.round(Math.min(w * 0.12, lh * 0.88, 60));
+  const chompX = chompR + Math.round(w * 0.03);
+  const chompY = chompR + Math.round(h * 0.04);
+  const mouthRight = chompX + chompR + 10;
 
-  // Animation values
-  const hz = state.running ? 2 + state.settings.speed * 0.4 : 0;
-  const t  = Date.now() / 1000;
-  const mouthOpen = hz > 0
-    ? (Math.sin(t * Math.PI * 2 * hz) + 1) / 2
-    : 0.45;
-  const bob = (state.running && !renderCache.reducedMotion)
-    ? Math.sin(t * Math.PI * 2 * hz + Math.PI / 2) * chompR * 0.09
+  // ── Jaw + bob driven by char phase (synced to each character eaten) ──
+  // charPhase 0→1 over the duration of eating one character
+  const charPhase  = state.charProgress % 1;
+  const mouthOpen  = state.running ? Math.sin(charPhase * Math.PI) : 0.45;
+  const bob        = (state.running && !renderCache.reducedMotion)
+    ? Math.sin(charPhase * Math.PI) * chompR * 0.07
     : 0;
 
-  // Clip: words vanish once they reach the mouth opening
-  const clipX = chompX + chompR;
-
-  // ── Background — always dark in prompter ─────────────────────
+  // ── Background ───────────────────────────────────────────────
   if (state.cameraActive && ui.cameraFeed.readyState >= 2) {
     ctx.save();
     if (!state.settings.mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
@@ -479,62 +506,65 @@ function renderFrame() {
     ctx.fillRect(0, 0, w, h);
   }
 
-  if (!state.words.length) return;
+  if (!state.lines.length) return;
 
-  const fs      = state.settings.fontSize;
-  const pillR   = Math.round((fs + state.words[0].padY * 2) / 2); // pill corner radius
-  const wordY   = chompY + bob;
+  const activeLine = state.lines[state.lineIndex] ?? { text: '' };
+  const eatenCount = Math.floor(state.charProgress);
 
-  // ── Track lane (subtle glow behind pill row) ──────────────────
-  ctx.save();
-  ctx.fillStyle = 'rgba(255,255,255,0.04)';
-  ctx.fillRect(clipX, wordY - pillR - 2, w - clipX, (pillR + 2) * 2);
-  ctx.restore();
-
-  // ── Word pills ────────────────────────────────────────────────
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(clipX, 0, w - clipX, h);
-  ctx.clip();
-
-  if (state.settings.mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
+  // How far through the current line (0..1) — drives context lines rising
+  const lineRatio  = activeLine.text.length > 0
+    ? Math.min(1, eatenCount / activeLine.text.length)
+    : 1;
+  const vertSlide  = lineRatio * lh; // context lines rise by this much
 
   ctx.font = getFont();
   ctx.textBaseline = 'middle';
 
-  state.words.forEach((word) => {
-    const sx = word.x - state.scrollX + w;
+  if (state.settings.mirror) {
+    ctx.save();
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+  }
 
-    // Crunch: fire once when pill's right edge crosses into the mouth
-    if (!word.eaten && sx + word.pillW < clipX + pillR * 0.5) {
-      word.eaten = true;
-      spawnCrunch(clipX, wordY, pillR * 2);
-    }
+  // ── Active line — character-by-character eating ───────────────
+  const remaining  = activeLine.text.substring(eatenCount);
+  if (remaining) {
+    // The first character of `remaining` slides into the mouth:
+    // slideOffset goes from 0 (char just appeared) to firstCharW (fully eaten)
+    const firstCharW  = ctx.measureText(remaining[0]).width;
+    const slideOffset = charPhase * firstCharW;
+    const textX       = mouthRight - slideOffset;
 
-    if (sx + word.pillW < clipX || sx > w + 400) return;
+    // Clip: hide anything left of the mouth opening
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(chompX + chompR, 0, w, h);
+    ctx.clip();
+    ctx.fillStyle = '#f0f0f0';
+    ctx.fillText(remaining, textX, chompY + bob);
+    ctx.restore();
+  }
 
-    const dist     = sx - clipX;
-    const fadeZone = word.pillW + fs;
-    const opacity  = dist < fadeZone ? Math.max(0, dist / fadeZone) : 1;
+  // ── Context lines — next 4 lines, rising as active line is eaten ─
+  const CONTEXT_LINES = 4;
+  for (let i = 1; i <= CONTEXT_LINES; i++) {
+    const idx = state.lineIndex + i;
+    if (idx >= state.lines.length) break;
+    const ctxLine = state.lines[idx];
+    const lineY   = chompY + i * lh - vertSlide;
+    if (lineY > h + lh) break;
+
+    // Fade lines further from the active line
+    const alpha = Math.max(0.15, 1 - (i - 1) * 0.22);
 
     ctx.save();
-    ctx.globalAlpha = opacity;
-
-    // Pill background
-    const py = wordY - pillR;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.roundRect(sx, py, word.pillW, pillR * 2, pillR);
-    ctx.fill();
-
-    // Word text (dark on white pill)
-    ctx.fillStyle = '#111111';
-    ctx.fillText(word.text, sx + word.padX, wordY);
-
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle   = '#f0f0f0';
+    ctx.fillText(ctxLine.text, padding, lineY);
     ctx.restore();
-  });
+  }
 
-  ctx.restore();
+  if (state.settings.mirror) ctx.restore();
 
   // ── Pac-Man ──────────────────────────────────────────────────
   drawChomp(chompX, chompY, chompR, mouthOpen, bob);
@@ -542,18 +572,17 @@ function renderFrame() {
   // ── Crunch particles ─────────────────────────────────────────
   const now = performance.now();
   state.particles = state.particles.filter((p) => {
-    const age = now - p.born;       // ms
+    const age      = now - p.born;
     if (age > p.life) return false;
-    const progress = age / p.life;  // 0→1
+    const progress = age / p.life;
     const sec      = age / 1000;
     const px       = p.x + p.vx * sec;
-    const py       = p.y + p.vy * sec + 0.5 * 320 * sec * sec; // gravity
+    const py       = p.y + p.vy * sec + 0.5 * 320 * sec * sec;
 
     ctx.save();
     ctx.globalAlpha = 1 - progress;
     ctx.fillStyle   = p.color;
     ctx.beginPath();
-    // Small pill-shaped fragment
     ctx.roundRect(px - p.r, py - p.r * 0.4, p.r * 2, p.r * 0.8, p.r * 0.4);
     ctx.fill();
     ctx.restore();
@@ -561,8 +590,8 @@ function renderFrame() {
   });
 
   // ── Progress bar ─────────────────────────────────────────────
-  if (state.settings.progress && state.totalWidth > 0) {
-    const pct = Math.min(1, state.scrollX / state.totalWidth);
+  if (state.settings.progress && state.lines.length > 0) {
+    const pct = Math.min(1, state.lineIndex / state.lines.length);
     ui.progressBar.style.width = (pct * 100).toFixed(1) + '%';
   }
 }
@@ -570,14 +599,39 @@ function renderFrame() {
 function scrollLoop() {
   if (!state.running) return;
 
-  // Speed: 1 = 0.5px/frame, 10 = 8px/frame (exponential feel)
-  const px = 0.3 * Math.pow(state.settings.speed, 1.4);
-  const maxScroll = state.totalWidth + window.innerWidth * 0.15;
+  const activeLine = state.lines[state.lineIndex];
+  if (!activeLine) { state.running = false; return; }
 
-  state.scrollX = Math.min(state.scrollX + px, maxScroll);
+  // Characters per second: comfortable reading pace at speed 4 (~75 WPM)
+  // speed 1 = ~30 WPM, speed 10 = ~160 WPM
+  const charsPerSec   = 1.8 + state.settings.speed * 1.25;
+  const charsPerFrame = charsPerSec / 60;
+
+  const prevFloor = Math.floor(state.charProgress);
+  state.charProgress += charsPerFrame;
+  const newFloor  = Math.floor(state.charProgress);
+
+  // Small crunch on each word boundary
+  if (newFloor > prevFloor) {
+    for (let ci = prevFloor; ci < newFloor && ci < activeLine.text.length; ci++) {
+      const ch = activeLine.text[ci];
+      if (ch === ' ' || ch === '.' || ch === ',' || ch === '!' || ch === '?') {
+        spawnWordCrunch();
+      }
+    }
+  }
+
+  // Line fully eaten — advance to next
+  if (state.charProgress >= activeLine.text.length) {
+    const mp = mouthPos();
+    spawnCrunch(mp.x, mp.y, mp.lh * 0.8);
+    state.lineIndex++;
+    state.charProgress = 0;
+  }
+
   renderFrame();
 
-  if (state.scrollX < maxScroll) {
+  if (state.lineIndex < state.lines.length) {
     state.animFrameId = requestAnimationFrame(scrollLoop);
   } else {
     state.running = false;
@@ -606,7 +660,7 @@ function schedulePrepareCanvas() {
 // 2-finger: pinch = font size
 // ============================================================
 
-let _touch1X = null;
+let _touch1Y = null;
 let _touch1Speed = null;
 let _pinchDist = null;
 let _pinchFontSize = null;
@@ -623,7 +677,7 @@ ui.canvas.addEventListener('touchstart', (e) => {
     _pinchFontSize = state.settings.fontSize;
     _touch1X = null;
   } else {
-    _touch1X     = e.touches[0].clientX;
+    _touch1Y     = e.touches[0].clientY;
     _touch1Speed = state.settings.speed;
     _pinchDist   = null;
   }
@@ -635,10 +689,10 @@ ui.canvas.addEventListener('touchend', (e) => {
     return;
   }
   // tap = moved less than 10px
-  if (_touch1X !== null && Math.abs(e.changedTouches[0].clientX - _touch1X) < 10) {
+  if (_touch1Y !== null && Math.abs(e.changedTouches[0].clientY - _touch1Y) < 10) {
     togglePause();
   }
-  _touch1X = null;
+  _touch1Y = null;
 }, { passive: true });
 
 ui.canvas.addEventListener('touchmove', (e) => {
@@ -656,10 +710,10 @@ ui.canvas.addEventListener('touchmove', (e) => {
     }
     return;
   }
-  // 1-finger swipe left/right → speed (swipe left = faster, follows scroll direction)
-  if (_touch1X === null) return;
-  const dx    = _touch1X - e.touches[0].clientX;
-  const delta = Math.round(dx / 30);
+  // 1-finger swipe up/down → speed
+  if (_touch1Y === null) return;
+  const dy    = _touch1Y - e.touches[0].clientY;
+  const delta = Math.round(dy / 30);
   const newSpeed = Math.max(1, Math.min(10, _touch1Speed + delta));
   if (newSpeed !== state.settings.speed) {
     state.settings.speed = newSpeed;
@@ -735,8 +789,10 @@ function startPrompter() {
   showScreen('prompter');
   resizeCanvas();
   prepareCanvas();
-  state.scrollX = 0;
-  state.running = true;
+  state.lineIndex    = 0;
+  state.charProgress = 0;
+  state.particles    = [];
+  state.running      = true;
   scrollLoop();
 
   requestFullscreen(document.documentElement).catch(() => {});
