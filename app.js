@@ -96,42 +96,32 @@ function saveSettings() {
 
 const DEMO_SCRIPT = `TechCrunch feed unavailable. Pac-Man is hungry but offline. Check your connection and try again. Meanwhile, enjoy this placeholder text as Pac-Man eats every single character until help arrives. Waka waka waka.`;
 
-// CORS proxy strategies — tried in order until one succeeds.
-// Each returns the raw XML string or throws.
-const PROXY_STRATEGIES = [
-  async (url) => {
-    const r = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url),
-      { signal: AbortSignal.timeout(7000) });
-    if (!r.ok) throw new Error('allorigins ' + r.status);
-    const { contents } = await r.json();
-    if (!contents) throw new Error('allorigins empty');
-    return contents;
-  },
-  async (url) => {
-    const r = await fetch('https://corsproxy.io/?' + encodeURIComponent(url),
-      { signal: AbortSignal.timeout(7000) });
-    if (!r.ok) throw new Error('corsproxy ' + r.status);
-    return r.text();
-  },
-  async (url) => {
-    const r = await fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
-      { signal: AbortSignal.timeout(7000) });
-    if (!r.ok) throw new Error('codetabs ' + r.status);
-    return r.text();
-  },
-];
-
+// Race all CORS proxies simultaneously — first valid XML response wins.
+// Individual timeout: 8s. If all fail, throws AggregateError.
 async function fetchRaw(url) {
-  let lastErr;
-  for (const strategy of PROXY_STRATEGIES) {
-    try {
-      return await strategy(url);
-    } catch (e) {
-      lastErr = e;
-      console.warn('[EatText] proxy failed, trying next:', e.message);
-    }
-  }
-  throw lastErr;
+  const enc = encodeURIComponent(url);
+  const attempt = async (proxyUrl, extract) => {
+    const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error(proxyUrl + ' → ' + r.status);
+    const body = await extract(r);
+    if (!body || body.length < 50) throw new Error(proxyUrl + ' → empty');
+    return body;
+  };
+
+  return Promise.any([
+    attempt(
+      'https://api.codetabs.com/v1/proxy?quest=' + enc,
+      r => r.text()
+    ),
+    attempt(
+      'https://api.allorigins.win/get?url=' + enc,
+      async r => { const j = await r.json(); return j.contents; }
+    ),
+    attempt(
+      'https://corsproxy.io/?' + enc,
+      r => r.text()
+    ),
+  ]);
 }
 
 // Generic RSS fetch with multi-proxy fallback.
