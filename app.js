@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS = {
   mirror: false,
   progress: false,
   asciiMode: false,
+  yolo: false,
 };
 
 // ============================================================
@@ -75,6 +76,7 @@ const ui = {
   fontSizeValue:   $('font-size-value'),
   toggleMirror:    $('toggle-mirror'),
   toggleProgress:  $('toggle-progress'),
+  toggleYolo:      $('toggle-yolo'),
   arcadeGameover:  $('arcade-gameover'),
   arcadeGameoverCount: $('arcade-gameover-count'),
   btnNextArticle:  $('btn-next-article'),
@@ -301,6 +303,7 @@ function syncSettingsUI() {
 
   ui.toggleMirror.setAttribute('aria-checked', String(s.mirror));
   ui.toggleProgress.setAttribute('aria-checked', String(s.progress));
+  ui.toggleYolo.setAttribute('aria-checked', String(s.yolo));
 
   if (s.progress) ui.progressBar.classList.add('visible');
   else ui.progressBar.classList.remove('visible');
@@ -353,6 +356,12 @@ function bindSettingsEvents() {
 
   ui.toggleProgress.addEventListener('click', () => {
     state.settings.progress = !state.settings.progress;
+    saveSettings();
+    syncSettingsUI();
+  });
+
+  ui.toggleYolo.addEventListener('click', () => {
+    state.settings.yolo = !state.settings.yolo;
     saveSettings();
     syncSettingsUI();
   });
@@ -1173,14 +1182,25 @@ function finaleLoop() {
 // ── Read Over screen ──────────────────────────────────────────
 
 function showReadOver() {
+  dispatchEvent(new CustomEvent('eat:article-end', {
+    detail: { index: state.articleIndex, total: state.articles.length }
+  }));
+
+  const isLast = state.articleIndex >= state.articles.length - 1;
+
+  // Yolo mode: auto-advance without showing overlay (unless it's the last article)
+  if (state.settings.yolo && !isLast) {
+    state.articleIndex++;
+    loadCurrentArticle();
+    startPrompter();
+    return;
+  }
+
   if (ui.arcadeGameoverCount) {
     ui.arcadeGameoverCount.textContent =
       `${state.articleIndex + 1} / ${state.articles.length}`;
   }
   if (ui.arcadeGameover) ui.arcadeGameover.hidden = false;
-  dispatchEvent(new CustomEvent('eat:article-end', {
-    detail: { index: state.articleIndex, total: state.articles.length }
-  }));
 }
 
 function hideReadOver() {
