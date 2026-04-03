@@ -12,6 +12,14 @@ const STORAGE_KEY_SETTINGS = 'eattext_settings';
 const DEBOUNCE_SAVE_MS     = 500;
 const BITE_DURATION_MS     = 280; // one open→close cycle, independent of reading speed
 
+function notifySpeedChange() {
+  queueMicrotask(() => {
+    dispatchEvent(new CustomEvent('eat:speed-change', {
+      detail: { level: state.settings.speed }
+    }));
+  });
+}
+
 const DEFAULT_SETTINGS = {
   speed: 3,
   fontSize: 48,
@@ -269,6 +277,7 @@ function bindSettingsEvents() {
     state.settings.speed = Number(ui.sliderSpeed.value);
     ui.speedValue.textContent = state.settings.speed;
     saveSettings();
+    notifySpeedChange();
   });
 
   ui.sliderFontSize.addEventListener('input', () => {
@@ -1035,6 +1044,13 @@ function scrollLoop() {
       if (isSpecialChar(ch)) spawnExplosion(g.mouthX, g.activeY, g.lh);
       else spawnBiteCrunch(g.mouthX, g.activeY, g.lh, ch);
     }
+    // Notificar arcade.js
+    const wordsConsumed = newFloor - prevFloor;
+    queueMicrotask(() => {
+      dispatchEvent(new CustomEvent('eat:word', {
+        detail: { count: wordsConsumed, speed: state.settings.speed }
+      }));
+    });
   }
 
   // Line fully eaten — advance to next and precompute graphemes
@@ -1270,6 +1286,7 @@ ui.canvas.addEventListener('touchmove', (e) => {
   if (newSpeed !== state.settings.speed) {
     state.settings.speed = newSpeed;
     saveSettings();
+    notifySpeedChange();
   }
 }, { passive: true });
 
@@ -1310,7 +1327,11 @@ function startPrompter() {
   state.particles    = [];
   state.lastBiteTime = 0;
   rebuildGraphemes();
+  notifySpeedChange();
   state.running      = true;
+  queueMicrotask(() => {
+    dispatchEvent(new CustomEvent('eat:session-start'));
+  });
   scrollLoop();
 
   requestFullscreen(document.documentElement).catch(() => {});
